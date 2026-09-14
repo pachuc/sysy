@@ -161,7 +161,11 @@ fn read_elements<T: DeserializeOwned>(
 }
 
 fn read_layout(object: &Map<String, Value>, problems: &mut Vec<Problem>) -> Layout {
-    let Some(Value::Object(entries)) = object.get("layout") else {
+    // A design can be authored before any positions have been saved.
+    let Some(value) = object.get("layout") else {
+        return Layout::new();
+    };
+    let Value::Object(entries) = value else {
         problems.push(Problem::InvalidField {
             field: "layout".into(),
             message: "expected an object".into(),

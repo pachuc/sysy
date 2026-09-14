@@ -52,6 +52,14 @@ enum Command {
         #[command(subcommand)]
         command: NoteCommand,
     },
+    /// Open the design viewer
+    Ui { path: PathBuf },
+    /// Compute and save positions, preserving pins unless reset
+    Layout {
+        path: PathBuf,
+        #[arg(long)]
+        reset: bool,
+    },
     /// Print the whole design
     Show { path: PathBuf },
     /// Check the design and report all problems
@@ -376,6 +384,22 @@ fn run(command: Command) -> Result<Output> {
             };
             sysy_core::create(&path, &design)?;
             output(&design, format!("Created {}", path.display()))
+        }
+        Command::Ui { path } => {
+            sysy_ui::run(&path)?;
+            output(json!({"path": path}), "Viewer closed")
+        }
+        Command::Layout { path, reset } => {
+            let mut design = sysy_core::load(&path)?;
+            if reset {
+                design.layout.clear();
+            }
+            design.layout = sysy_layout::layout(&design);
+            sysy_core::save(&path, &design)?;
+            output(
+                &design.layout,
+                format!("Saved layout to {}", path.display()),
+            )
         }
         Command::Show { path } => {
             let design = sysy_core::load(path)?;

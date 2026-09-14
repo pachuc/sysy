@@ -480,8 +480,8 @@ fn malformed_records_do_not_hide_other_records_or_model_problems() {
 }
 
 #[test]
-fn missing_sections_wrong_types_invalid_json_and_io_errors_are_rejected() {
-    assert_eq!(problems(load_json(&json!({}))).len(), 7);
+fn missing_required_sections_wrong_types_invalid_json_and_io_errors_are_rejected() {
+    assert_eq!(problems(load_json(&json!({}))).len(), 6);
     assert!(
         matches!(problems(load_json(&json!([]))).as_slice(), [Problem::InvalidField { field, .. }] if field == "document")
     );
@@ -499,4 +499,21 @@ fn missing_sections_wrong_types_invalid_json_and_io_errors_are_rejected() {
         save(directory.path().join("missing/design.json"), &checkout()),
         Err(Error::Io(_))
     ));
+}
+
+#[test]
+fn omitted_layout_is_empty_but_explicit_invalid_layout_is_rejected() {
+    let mut value: Value = serde_json::from_str(include_str!("fixtures/checkout.json")).unwrap();
+    value.as_object_mut().unwrap().remove("layout");
+    let design = load_json(&value).unwrap();
+    assert!(design.layout.is_empty());
+    let mut expected = checkout();
+    expected.layout.clear();
+    assert_eq!(design, expected);
+    for invalid in [Value::Null, json!([]), json!("positions"), json!(12)] {
+        value["layout"] = invalid;
+        assert!(
+            matches!(problems(load_json(&value)).as_slice(), [Problem::InvalidField { field, .. }] if field == "layout")
+        );
+    }
 }
