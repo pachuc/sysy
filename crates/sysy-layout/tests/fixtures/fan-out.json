@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "design": {
+    "title": "fan-out"
+  },
+  "containers": [],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c"
+    },
+    {
+      "id": "d",
+      "kind": "service",
+      "label": "d"
+    },
+    {
+      "id": "e",
+      "kind": "service",
+      "label": "e"
+    }
+  ],
+  "edges": [
+    {
+      "id": "a-b",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    },
+    {
+      "id": "a-c",
+      "from": "a",
+      "to": "c",
+      "kind": "sync"
+    },
+    {
+      "id": "a-d",
+      "from": "a",
+      "to": "d",
+      "kind": "sync"
+    },
+    {
+      "id": "a-e",
+      "from": "a",
+      "to": "e",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {}
+}
