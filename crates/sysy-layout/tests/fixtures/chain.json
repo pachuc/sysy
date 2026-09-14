@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "design": {
+    "title": "chain"
+  },
+  "containers": [],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c"
+    },
+    {
+      "id": "d",
+      "kind": "service",
+      "label": "d"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    },
+    {
+      "id": "bc",
+      "from": "b",
+      "to": "c",
+      "kind": "sync"
+    },
+    {
+      "id": "cd",
+      "from": "c",
+      "to": "d",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {}
+}

@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "design": {
+    "title": "container-edges"
+  },
+  "containers": [
+    {
+      "id": "box",
+      "label": "box"
+    },
+    {
+      "id": "empty",
+      "label": "empty"
+    },
+    {
+      "id": "nested",
+      "label": "nested",
+      "parent": "box"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b",
+      "container": "box"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c",
+      "container": "nested"
+    },
+    {
+      "id": "d",
+      "kind": "service",
+      "label": "d"
+    }
+  ],
+  "edges": [
+    {
+      "id": "a-box",
+      "from": "a",
+      "to": "box",
+      "kind": "sync"
+    },
+    {
+      "id": "box-d",
+      "from": "box",
+      "to": "d",
+      "kind": "sync"
+    },
+    {
+      "id": "d-empty",
+      "from": "d",
+      "to": "empty",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {}
+}

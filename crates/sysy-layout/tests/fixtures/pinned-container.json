@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "design": {
+    "title": "pinned-container"
+  },
+  "containers": [
+    {
+      "id": "box",
+      "label": "box"
+    },
+    {
+      "id": "inner",
+      "label": "inner",
+      "parent": "box"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a",
+      "container": "inner"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b",
+      "container": "inner"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c",
+      "container": "box"
+    },
+    {
+      "id": "outside",
+      "kind": "service",
+      "label": "outside"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    },
+    {
+      "id": "bc",
+      "from": "b",
+      "to": "c",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {
+    "box": {
+      "x": -64,
+      "y": 400,
+      "size": {
+        "width": 80,
+        "height": 80
+      }
+    },
+    "a": {
+      "x": 0,
+      "y": 464
+    },
+    "outside": {
+      "x": 1000,
+      "y": -100
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "design": {
+    "title": "crossings"
+  },
+  "containers": [],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c"
+    },
+    {
+      "id": "d",
+      "kind": "service",
+      "label": "d"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ad",
+      "from": "a",
+      "to": "d",
+      "kind": "sync"
+    },
+    {
+      "id": "bc",
+      "from": "b",
+      "to": "c",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {}
+}
