@@ -1,0 +1,214 @@
+{
+  "version": 1,
+  "design": {
+    "title": "swarmy",
+    "description": "Agent swarm infrastructure: session scheduling, step execution, and inference."
+  },
+  "containers": [
+    {
+      "id": "control",
+      "label": "Control plane",
+      "description": "Scheduler, step workers, and inference gateway services."
+    },
+    {
+      "id": "state",
+      "label": "State",
+      "description": "Durable session state, message streams, and large objects."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "cli",
+      "kind": "client",
+      "label": "swarmy CLI",
+      "description": "Creates sessions, wakes them, and streams live events."
+    },
+    {
+      "id": "fdb",
+      "kind": "database",
+      "label": "FoundationDB",
+      "description": "Stores sessions, event logs, leases, the runnable index, and idempotency records.",
+      "container": "state"
+    },
+    {
+      "id": "gateway",
+      "kind": "service",
+      "label": "Inference gateway",
+      "description": "Consumes inference jobs from NATS, calls the model provider, and writes completions to FoundationDB.",
+      "container": "control"
+    },
+    {
+      "id": "nats",
+      "kind": "queue",
+      "label": "NATS JetStream",
+      "description": "Carries work queues and live event feeds.",
+      "container": "state"
+    },
+    {
+      "id": "objects",
+      "kind": "storage",
+      "label": "Object storage",
+      "description": "S3-compatible storage for large payloads and snapshots.",
+      "container": "state"
+    },
+    {
+      "id": "provider",
+      "kind": "external",
+      "label": "ChatGPT",
+      "description": "External model provider called by the inference gateway."
+    },
+    {
+      "id": "scheduler",
+      "kind": "service",
+      "label": "Scheduler",
+      "description": "Scans FoundationDB for runnable sessions, publishes nudges on NATS, reaps expired leases, and answers wake requests.",
+      "container": "control"
+    },
+    {
+      "id": "workers",
+      "kind": "service",
+      "label": "Step workers",
+      "description": "Claim session leases, run the harness, execute local tools, and publish inference jobs. One node represents the worker pool.",
+      "container": "control"
+    }
+  ],
+  "edges": [
+    {
+      "id": "complete",
+      "from": "gateway",
+      "to": "fdb",
+      "kind": "data",
+      "label": "Write completions"
+    },
+    {
+      "id": "create",
+      "from": "cli",
+      "to": "fdb",
+      "kind": "data",
+      "label": "Create sessions"
+    },
+    {
+      "id": "dispatch",
+      "from": "nats",
+      "to": "workers",
+      "kind": "async",
+      "label": "Session nudges"
+    },
+    {
+      "id": "enqueue",
+      "from": "workers",
+      "to": "nats",
+      "kind": "async",
+      "label": "Inference jobs"
+    },
+    {
+      "id": "events",
+      "from": "workers",
+      "to": "fdb",
+      "kind": "data",
+      "label": "Append events"
+    },
+    {
+      "id": "infer",
+      "from": "nats",
+      "to": "gateway",
+      "kind": "async",
+      "label": "Inference jobs"
+    },
+    {
+      "id": "lease",
+      "from": "workers",
+      "to": "fdb",
+      "kind": "data",
+      "label": "Claim session lease"
+    },
+    {
+      "id": "live",
+      "from": "nats",
+      "to": "cli",
+      "kind": "async",
+      "label": "Live events"
+    },
+    {
+      "id": "model",
+      "from": "gateway",
+      "to": "provider",
+      "kind": "sync",
+      "label": "Request completion"
+    },
+    {
+      "id": "nudge",
+      "from": "scheduler",
+      "to": "nats",
+      "kind": "async",
+      "label": "Session nudges"
+    },
+    {
+      "id": "payloads",
+      "from": "workers",
+      "to": "objects",
+      "kind": "data",
+      "label": "Read/write payloads"
+    },
+    {
+      "id": "publish",
+      "from": "workers",
+      "to": "nats",
+      "kind": "async",
+      "label": "Live events"
+    },
+    {
+      "id": "reap",
+      "from": "scheduler",
+      "to": "fdb",
+      "kind": "data",
+      "label": "Reap expired leases"
+    },
+    {
+      "id": "scan",
+      "from": "scheduler",
+      "to": "fdb",
+      "kind": "data",
+      "label": "Scan runnable sessions"
+    },
+    {
+      "id": "session",
+      "from": "workers",
+      "to": "fdb",
+      "kind": "data",
+      "label": "Read session state"
+    },
+    {
+      "id": "snapshots",
+      "from": "workers",
+      "to": "objects",
+      "kind": "data",
+      "label": "Read/write snapshots"
+    },
+    {
+      "id": "wake",
+      "from": "cli",
+      "to": "scheduler",
+      "kind": "sync",
+      "label": "Wake session"
+    }
+  ],
+  "notes": [
+    {
+      "id": "durable",
+      "text": "Sessions, event logs, leases, runnable index, idempotency records.",
+      "on": "fdb"
+    },
+    {
+      "id": "harness",
+      "text": "Harness and local tools run in each worker.",
+      "on": "workers"
+    },
+    {
+      "id": "transport",
+      "text": "Work queues and live event feeds share the bus.",
+      "on": "nats"
+    }
+  ],
+  "layout": {}
+}
