@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::Path;
 
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, Serializer, de::DeserializeOwned};
 use serde_json::{Map, Value};
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -24,6 +24,8 @@ const KEYS: [&str; 7] = [
 pub enum Error {
     #[error("design file I/O failed: {0}")]
     Io(#[from] io::Error),
+    #[error("{kind} '{id}' does not exist")]
+    NotFound { kind: &'static str, id: String },
     #[error("invalid JSON: {0}")]
     Json(#[from] serde_json::Error),
     #[error("invalid design:\n{}", problem_messages(.0))]
@@ -190,22 +192,46 @@ pub fn save(path: impl AsRef<Path>, design: &Design) -> Result<(), Error> {
     if !problems.is_empty() {
         return Err(Error::Validation(problems));
     }
-    let document = Document {
-        version: VERSION,
-        design: Metadata {
-            title: design.title.clone(),
-            description: design.description.clone(),
-        },
-        containers: ordered(&design.containers, |item| &item.id),
-        nodes: ordered(&design.nodes, |item| &item.id),
-        edges: ordered(&design.edges, |item| &item.id),
-        notes: ordered(&design.notes, |item| &item.id),
-        layout: &design.layout,
-    };
-    let mut bytes = serde_json::to_vec_pretty(&document)?;
+    write_design(path.as_ref(), design, false)
+}
+
+/// Create a design file without replacing an existing path.
+///
+/// # Errors
+/// Returns validation problems or a serialization or I/O error, including when
+/// the destination already exists. Existing files are left untouched.
+pub fn create(path: impl AsRef<Path>, design: &Design) -> Result<(), Error> {
+    let problems = design.validate();
+    if !problems.is_empty() {
+        return Err(Error::Validation(problems));
+    }
+    write_design(path.as_ref(), design, true)
+}
+
+fn write_design(path: &Path, design: &Design, create_new: bool) -> Result<(), Error> {
+    let mut bytes = serde_json::to_vec_pretty(design)?;
     bytes.push(b'\n');
-    atomic_write(path.as_ref(), |file| file.write_all(&bytes))?;
+    atomic_write(path, |file| file.write_all(&bytes), create_new)?;
     Ok(())
+}
+
+// CLI output and saved files share one representation, including sorted arrays.
+impl Serialize for Design {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Document {
+            version: VERSION,
+            design: Metadata {
+                title: self.title.clone(),
+                description: self.description.clone(),
+            },
+            containers: ordered(&self.containers, |item| &item.id),
+            nodes: ordered(&self.nodes, |item| &item.id),
+            edges: ordered(&self.edges, |item| &item.id),
+            notes: ordered(&self.notes, |item| &item.id),
+            layout: &self.layout,
+        }
+        .serialize(serializer)
+    }
 }
 
 fn ordered<T>(items: &[T], id: impl Fn(&T) -> &str) -> Vec<&T> {
@@ -214,7 +240,11 @@ fn ordered<T>(items: &[T], id: impl Fn(&T) -> &str) -> Vec<&T> {
     items
 }
 
-fn atomic_write(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> io::Result<()> {
+fn atomic_write(
+    path: &Path,
+    write: impl FnOnce(&mut File) -> io::Result<()>,
+    create_new: bool,
+) -> io::Result<()> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -223,7 +253,13 @@ fn atomic_write(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) ->
     write(temporary.as_file_mut())?;
     temporary.as_file_mut().flush()?;
     temporary.as_file().sync_all()?;
-    temporary.persist(path).map_err(|error| error.error)?;
+    if create_new {
+        temporary
+            .persist_noclobber(path)
+            .map_err(|error| error.error)?;
+    } else {
+        temporary.persist(path).map_err(|error| error.error)?;
+    }
     Ok(())
 }
 
@@ -238,10 +274,14 @@ mod tests {
         let original = include_bytes!("../tests/fixtures/checkout.json");
         std::fs::write(&target, original).unwrap();
 
-        let result = atomic_write(&target, |file| {
-            file.write_all(b"{\"version\":")?;
-            Err(io::Error::other("simulated interruption before rename"))
-        });
+        let result = atomic_write(
+            &target,
+            |file| {
+                file.write_all(b"{\"version\":")?;
+                Err(io::Error::other("simulated interruption before rename"))
+            },
+            false,
+        );
 
         assert!(result.is_err());
         assert_eq!(std::fs::read(&target).unwrap(), original);
