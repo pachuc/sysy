@@ -9,6 +9,10 @@ workspace = true
 
 [dependencies]
 gpui.workspace = true
+notify.workspace = true
 sysy-core.workspace = true
 sysy-layout.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
