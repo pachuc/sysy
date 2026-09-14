@@ -2,11 +2,13 @@
 //!
 //! See `docs/DESIGN.md` for the design this crate implements.
 
+mod edit;
 mod file;
 mod model;
 mod validation;
 
-pub use file::{Error, VERSION, load, save};
+pub use edit::{ContainerUpdate, EdgeUpdate, NodeUpdate, NoteUpdate, OptionalUpdate};
+pub use file::{Error, VERSION, create, load, save};
 pub use model::{
     Container, Design, Edge, EdgeKind, Layout, LayoutEntry, Node, NodeKind, Note, Size,
 };
