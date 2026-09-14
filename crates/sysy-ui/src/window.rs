@@ -1,55 +1,104 @@
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
+    time::{Duration, Instant},
 };
 
 use gpui::{
-    App, Application, BorderStyle, Bounds, ContentMask, Context, Div, FocusHandle, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Path, Pixels, Point, ScrollDelta,
-    ScrollWheelEvent, SharedString, Stateful, TextAlign, TextRun, Window, WindowBounds,
-    WindowOptions, canvas, div, fill, point, prelude::*, px, quad, rgb, size, transparent_black,
+    App, Application, BorderStyle, Bounds, ContentMask, Context, DispatchPhase, Div, FocusHandle,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Path, Pixels, Point,
+    ScrollDelta, ScrollWheelEvent, SharedString, Stateful, TextAlign, TextRun, Window,
+    WindowBounds, WindowOptions, canvas, div, fill, point, prelude::*, px, quad, rgb, size,
+    transparent_black,
 };
-use sysy_core::{Design, NodeKind};
+use sysy_core::NodeKind;
 use sysy_layout::{Point as WorldPoint, Rect, Size};
 
+use crate::interaction::LiveDesign;
 use crate::scene::{Camera, Label, Primitive, Scene, Shape, ShapeKind, detail_text, highlighted};
 
 #[derive(Clone, Copy, Default)]
 struct Shared {
     camera: Camera,
-    origin: Point<Pixels>,
+    bounds: Bounds<Pixels>,
     fit_pending: bool,
 }
 
 struct Viewer {
-    design: Design,
+    document: LiveDesign,
+    _reload_task: gpui::Task<()>,
     scene: Rc<Scene>,
     shared: Rc<Cell<Shared>>,
-    selected: Option<String>,
     hovered: Option<String>,
     pan_start: Option<Point<Pixels>>,
     focus: FocusHandle,
 }
 
 impl Viewer {
-    fn new(design: Design, cx: &mut Context<Self>) -> Self {
-        let scene = Rc::new(Scene::build(&design, &sysy_layout::layout(&design)));
+    fn new(document: LiveDesign, cx: &mut Context<Self>) -> Self {
+        let scene = Rc::new(Scene::build(
+            &document.state.design,
+            &document.state.positions,
+        ));
+        let reload_task = cx.spawn(async move |viewer, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(25))
+                    .await;
+                if viewer
+                    .update(cx, |this, cx| {
+                        if this.document.poll(Instant::now()) {
+                            this.rebuild();
+                            this.hovered = None;
+                            cx.notify();
+                        }
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
         Self {
-            design,
+            document,
+            _reload_task: reload_task,
             scene,
             shared: Rc::new(Cell::new(Shared {
                 fit_pending: true,
                 ..Shared::default()
             })),
-            selected: None,
             hovered: None,
             pan_start: None,
             focus: cx.focus_handle(),
         }
     }
 
+    fn rebuild(&mut self) {
+        self.scene = Rc::new(Scene::build(
+            &self.document.state.design,
+            &self.document.state.positions,
+        ));
+    }
+
+    fn world(&self, position: Point<Pixels>) -> WorldPoint {
+        self.shared
+            .get()
+            .camera
+            .screen_to_world(self.local(position))
+    }
+
+    fn mouse_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.pan_start = None;
+        if self.document.state.is_dragging() {
+            self.document.state.drag_to(self.world(event.position));
+            self.document.finish_drag();
+            self.rebuild();
+            cx.notify();
+        }
+    }
+
     fn local(&self, position: Point<Pixels>) -> WorldPoint {
-        let origin = self.shared.get().origin;
+        let origin = self.shared.get().bounds.origin;
         WorldPoint {
             x: f64::from(f32::from(position.x - origin.x)),
             y: f64::from(f32::from(position.y - origin.y)),
@@ -57,6 +106,9 @@ impl Viewer {
     }
 
     fn hit(&self, position: Point<Pixels>) -> Option<String> {
+        if !self.shared.get().bounds.contains(&position) {
+            return None;
+        }
         let camera = self.shared.get().camera;
         self.scene
             .hit_test(
@@ -68,14 +120,34 @@ impl Viewer {
 
     fn mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus);
-        self.selected = self.hit(event.position);
-        self.pan_start = self.selected.is_none().then_some(event.position);
+        self.document.state.selected = self.hit(event.position);
+        self.pan_start = self
+            .document
+            .state
+            .selected
+            .is_none()
+            .then_some(event.position);
+        if let Some(id) = self.document.state.selected.clone() {
+            self.document
+                .state
+                .begin_drag(&id, self.world(event.position));
+        }
         cx.notify();
     }
 
     fn mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         if event.pressed_button != Some(MouseButton::Left) {
             self.pan_start = None;
+            if self.document.state.is_dragging() {
+                self.document.state.cancel_drag();
+                self.rebuild();
+                cx.notify();
+            }
+        }
+        if self.document.state.is_dragging() {
+            self.document.state.drag_to(self.world(event.position));
+            self.rebuild();
+            cx.notify();
         }
         if let Some(last) = self.pan_start {
             let mut shared = self.shared.get();
@@ -122,7 +194,8 @@ impl Viewer {
         let shared = Rc::clone(&self.shared);
         let bounds = scene.bounds;
         let hovered = self.hovered.clone();
-        let selected = self.selected.clone();
+        let selected = self.document.state.selected.clone();
+        let mouse_move = cx.listener(Self::mouse_move);
         div()
             .id("canvas")
             .flex_1()
@@ -130,15 +203,8 @@ impl Viewer {
             .h_full()
             .overflow_hidden()
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
-            .on_mouse_move(cx.listener(Self::mouse_move))
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, _: &MouseUpEvent, _, _| this.pan_start = None),
-            )
-            .on_mouse_up_out(
-                MouseButton::Left,
-                cx.listener(|this, _: &MouseUpEvent, _, _| this.pan_start = None),
-            )
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::mouse_up))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::mouse_up))
             .on_hover(cx.listener(|this, over: &bool, _, cx| {
                 if !over {
                     this.hovered = None;
@@ -150,7 +216,7 @@ impl Viewer {
                 canvas(
                     move |area, _, _| {
                         let mut state = shared.get();
-                        state.origin = area.origin;
+                        state.bounds = area;
                         if state.fit_pending
                             && area.size.width > px(0.0)
                             && area.size.height > px(0.0)
@@ -169,6 +235,11 @@ impl Viewer {
                         state.camera
                     },
                     move |area, camera, window, cx| {
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                            if phase == DispatchPhase::Bubble {
+                                mouse_move(event, window, cx);
+                            }
+                        });
                         window.with_content_mask(Some(ContentMask { bounds: area }), |window| {
                             window.paint_quad(fill(area, rgb(0x00fa_faf7)));
                             let transform = Transform {
@@ -189,9 +260,11 @@ impl Viewer {
 
     fn panel(&self) -> Stateful<Div> {
         let fields = self
+            .document
+            .state
             .selected
             .as_deref()
-            .and_then(|id| detail_text(&self.design, id));
+            .and_then(|id| detail_text(&self.document.state.design, id));
         let content = if let Some(fields) = fields {
             div()
                 .flex()
@@ -220,10 +293,13 @@ impl Viewer {
             .bg(rgb(0x00ff_ffff))
             .border_l_1()
             .border_color(rgb(0x00cb_d5e1))
-            .child(div().text_lg().mb_4().child(self.design.title.clone()))
+            .child(div().text_lg().mb_4().child(self.document.state.design.title.clone()))
+            .child(div().mb_4().text_xs().text_color(rgb(
+                if self.document.state.error.is_some() { 0x00b9_1c1c } else { 0x0064_748b }
+            )).child(self.document.state.status()))
             .child(content)
             .child(div().mt_6().text_xs().text_color(rgb(0x0064_748b)).child(
-                "Drag empty canvas or scroll to pan. Wheel or Ctrl-scroll to zoom. Press f to fit.",
+                "Drag nodes or containers to arrange them. Drag empty canvas or scroll to pan. Wheel or Ctrl-scroll to zoom. Press f to fit.",
             ))
     }
 }
@@ -474,7 +550,7 @@ fn paint_label(label: &Label, transform: Transform, window: &mut Window, cx: &mu
     });
 }
 
-pub(crate) fn run(design: Design) -> Result<(), crate::Error> {
+pub(crate) fn run(document: LiveDesign) -> Result<(), crate::Error> {
     let error = Rc::new(RefCell::new(None));
     let open_error = Rc::clone(&error);
     Application::new().run(move |cx: &mut App| {
@@ -483,12 +559,12 @@ pub(crate) fn run(design: Design) -> Result<(), crate::Error> {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(gpui::TitlebarOptions {
-                    title: Some(format!("sysy — {}", design.title).into()),
+                    title: Some(format!("sysy — {}", document.state.design.title).into()),
                     ..Default::default()
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(|cx| Viewer::new(design, cx)),
+            |_, cx| cx.new(|cx| Viewer::new(document, cx)),
         );
         if let Err(failure) = result {
             *open_error.borrow_mut() = Some(crate::Error::Window(failure.to_string()));
