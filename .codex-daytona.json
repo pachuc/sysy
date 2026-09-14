@@ -1,9 +1,12 @@
 {
   "branch": "master",
-  "snapshot": "sysy-dev-PLACEHOLDER",
+  "snapshot": "sysy-dev-f82579535e82",
   "codexVersion": "0.153.4",
   "model": "gpt-6-astra",
   "effort": "high",
-  "setup": ["rustup show", "cargo fetch"],
+  "setup": [
+    "rustup show",
+    "cargo fetch"
+  ],
   "autoStopMinutes": 60
 }
