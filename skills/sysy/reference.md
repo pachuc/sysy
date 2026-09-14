@@ -16,6 +16,8 @@ Commands:
   container  Add, edit, remove, or list containers
   edge       Add, edit, remove, or list edges
   note       Add, edit, remove, or list notes
+  ui         Open the design viewer
+  layout     Compute and save positions, preserving pins unless reset
   show       Print the whole design
   validate   Check the design and report all problems
   help       Print this message or the help of the given subcommand(s)
@@ -426,6 +428,37 @@ Arguments:
 Options:
       --json  Print machine-readable JSON instead of text
   -h, --help  Print help
+```
+
+## `sysy ui`
+
+```text
+Open the design viewer
+
+Usage: sysy ui [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+
+Options:
+      --json  Print machine-readable JSON instead of text
+  -h, --help  Print help
+```
+
+## `sysy layout`
+
+```text
+Compute and save positions, preserving pins unless reset
+
+Usage: sysy layout [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+
+Options:
+      --json   Print machine-readable JSON instead of text
+      --reset
+  -h, --help   Print help
 ```
 
 ## `sysy show`

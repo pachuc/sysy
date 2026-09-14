@@ -532,3 +532,68 @@ fn design_with_dependents() -> Harness {
     save(harness.path(), &design).unwrap();
     harness
 }
+
+#[test]
+fn layout_writes_positions_is_idempotent_and_reset_recomputes_pins() {
+    let harness = Harness::empty();
+    let mut fixture: Value =
+        serde_json::from_str(include_str!("../../sysy-core/tests/fixtures/checkout.json")).unwrap();
+    fixture.as_object_mut().unwrap().remove("layout");
+    fixture["notes"] = json!([{ "id": "reminder", "text": "Keep orders durable", "on": "orders" }]);
+    fs::write(harness.path(), serde_json::to_vec(&fixture).unwrap()).unwrap();
+    let result = harness.ok(&["layout"], &[]);
+    let first = harness.design();
+    assert_eq!(result, serde_json::to_value(&first.layout).unwrap());
+    // Edges are derived from their endpoints; the layout returns boxes for nodes,
+    // containers, and notes, and preserves any existing edge entries.
+    for id in ["api", "orders", "shopper", "vpc", "reminder"] {
+        assert!(first.layout.contains_key(id));
+    }
+    let bytes = fs::read(harness.path()).unwrap();
+    assert_eq!(harness.ok(&["layout"], &[]), result);
+    assert_eq!(fs::read(harness.path()).unwrap(), bytes);
+    let mut pinned = first.clone();
+    pinned.layout.get_mut("shopper").unwrap().x = -9000.0;
+    pinned.layout.insert(
+        "persist".into(),
+        sysy_core::LayoutEntry {
+            x: 123.0,
+            y: 456.0,
+            size: None,
+        },
+    );
+    save(harness.path(), &pinned).unwrap();
+    harness.ok(&["layout"], &[]);
+    assert_eq!(harness.design().layout["shopper"], pinned.layout["shopper"]);
+    assert_eq!(harness.design().layout["persist"], pinned.layout["persist"]);
+    harness.ok(&["layout"], &["--reset"]);
+    assert_eq!(harness.design(), first);
+}
+
+#[test]
+fn layout_grows_pinned_containers_and_reports_invalid_files_without_writing() {
+    let harness = Harness::empty();
+    fs::write(
+        harness.path(),
+        include_str!("../../sysy-layout/tests/fixtures/pinned-container.json"),
+    )
+    .unwrap();
+    let original = harness.design();
+    harness.ok(&["layout"], &[]);
+    let placed = harness.design();
+    for (id, pin) in &original.layout {
+        let actual = placed.layout[id];
+        assert_eq!((actual.x, actual.y), (pin.x, pin.y));
+        if let Some(size) = pin.size {
+            let grown = actual.size.unwrap();
+            assert!(grown.width >= size.width && grown.height >= size.height);
+        }
+    }
+    let grown = placed.layout["box"].size.unwrap();
+    let saved = original.layout["box"].size.unwrap();
+    assert!(grown.width > saved.width || grown.height > saved.height);
+    fs::write(harness.path(), "{invalid").unwrap();
+    harness.error(&["layout"], &[]);
+    harness.error(&["layout"], &["--reset"]);
+    harness.error(&["ui"], &[]);
+}
