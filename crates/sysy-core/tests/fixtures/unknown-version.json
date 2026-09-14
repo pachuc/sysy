@@ -1,0 +1,54 @@
+{
+  "version": 7,
+  "design": {
+    "title": "Checkout",
+    "description": "Order placement path."
+  },
+  "containers": [
+    {
+      "id": "vpc",
+      "label": "Production VPC"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "Checkout API",
+      "container": "vpc"
+    },
+    {
+      "id": "orders",
+      "kind": "database",
+      "label": "Orders DB",
+      "container": "vpc"
+    },
+    {
+      "id": "shopper",
+      "kind": "client",
+      "label": "Shopper"
+    }
+  ],
+  "edges": [
+    {
+      "id": "persist",
+      "from": "api",
+      "to": "orders",
+      "kind": "data"
+    },
+    {
+      "id": "place-order",
+      "from": "shopper",
+      "to": "api",
+      "kind": "sync",
+      "label": "POST /orders"
+    }
+  ],
+  "notes": [],
+  "layout": {
+    "api": {
+      "x": 320.0,
+      "y": 120.0
+    }
+  }
+}
