@@ -109,6 +109,8 @@ JSON error on stderr when something is wrong. Mutating commands validate the
 whole design before writing and refuse to write an invalid one.
 
 - `sysy new PATH --title TITLE [--description TEXT]` creates an empty design.
+- `sysy set PATH [--title TITLE] [--description TEXT | --clear-description]`
+  changes supplied metadata fields while preserving architecture and layout.
 - `sysy node add PATH ID --kind KIND --label LABEL [--description TEXT]
   [--tag TAG]... [--in CONTAINER]`, and matching `node set`, `node remove`,
   and `node list`. Removing a node removes its edges and notes and its layout
@@ -137,7 +139,9 @@ within a layer so the container frame stays compact. Containers are sized to
 their contents plus padding, nested containers padded inside their parents.
 Within a layer, nodes are ordered to reduce edge crossings with the usual
 barycenter pass. Edges are drawn as straight or gently curved lines with an
-arrowhead at the target end, and labels sit at the midpoint.
+arrowhead at the target end, and labels prefer the midpoint. When a label overlaps another label, a node,
+a note, or a container heading, it moves to a nearby free point on the edge.
+If necessary it moves below the obstruction with a line back to its edge.
 
 Pinned elements are respected: a pinned node keeps its position, and the
 unpinned nodes are placed around it. A pinned container keeps its position and

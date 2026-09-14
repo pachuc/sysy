@@ -170,13 +170,11 @@ impl ViewerState {
                 positions.insert(id.clone(), *entry);
             }
         }
-        if ids.iter().any(|id| !positions.contains_key(*id)) {
-            let mut input = design.clone();
-            input.layout = positions.clone();
-            for (id, entry) in sysy_layout::layout(&input) {
-                positions.entry(id).or_insert(entry);
-            }
-        }
+        // Recompute frame sizes even when all IDs already exist: label edits
+        // can widen nodes. Keep the computed growth as well as new positions.
+        let mut input = design.clone();
+        input.layout = positions;
+        let positions = sysy_layout::layout(&input);
         if self
             .selected
             .as_deref()

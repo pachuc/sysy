@@ -259,9 +259,14 @@ fn explicit_layout_changes_take_effect_and_new_elements_get_positions() {
     sysy_core::save(&path, &disk).unwrap();
     state.reload(&path);
     assert!(state.positions.contains_key("added"));
-    for (id, entry) in original {
+    for (id, mut entry) in original {
+        if id == "vpc" {
+            // The newly added child extends the bottom of this frame by one gap.
+            entry.size.as_mut().unwrap().height += sysy_layout::ELEMENT_GAP;
+        }
         assert_eq!(state.positions[&id], entry);
     }
+    assert_padded_node(&state, "added", "vpc");
     assert_eq!(state.selected.as_deref(), Some("persist"));
     disk.layout = Layout::new();
     disk.layout = layout(&disk);
@@ -422,6 +427,10 @@ fn disk_updates_during_a_drag_are_merged_on_release() {
     poll_until(&mut viewer, |state| state.last_reload > last_reload);
     let mut expected = original;
     expected.extend(changed);
+    // Moving the rightmost child right grows both enclosing frames by the delta.
+    for id in ["deep", "inner"] {
+        expected.get_mut(id).unwrap().size.as_mut().unwrap().width += 23.0;
+    }
     assert_eq!(viewer.state.positions, expected);
 }
 
@@ -439,4 +448,67 @@ fn poll_until(viewer: &mut sysy_ui::interaction::LiveDesign, ready: impl Fn(&Vie
         );
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+#[test]
+fn checkout_reload_retains_frame_growth_after_adding_or_widening_a_node() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("design.json");
+    let mut disk = sysy_core::load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/checkout.json"
+    ))
+    .unwrap();
+    disk.layout = layout(&disk);
+    sysy_core::save(&path, &disk).unwrap();
+    let mut state = ViewerState::new(disk.clone());
+    let before = state.positions.clone();
+    let mut node = disk
+        .nodes
+        .iter()
+        .find(|node| node.id == "payment")
+        .unwrap()
+        .clone();
+    node.id = "payment-reconciler".into();
+    node.label = "Reconciler".into();
+    disk.add_node(node).unwrap();
+    sysy_core::save(&path, &disk).unwrap();
+    state.reload(&path);
+    assert_padded_node(&state, "payment-reconciler", "payments");
+    let old = before["payments"].size.unwrap();
+    let grown = state.positions["payments"].size.unwrap();
+    assert!(grown.width > old.width || grown.height > old.height);
+    for (id, entry) in &before {
+        assert_eq!(
+            (state.positions[id].x, state.positions[id].y),
+            (entry.x, entry.y)
+        );
+    }
+    disk.set_node(
+        "payment-reconciler",
+        sysy_core::NodeUpdate {
+            label: Some("Payment reconciliation worker".into()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    sysy_core::save(&path, &disk).unwrap();
+    state.reload(&path);
+    assert_padded_node(&state, "payment-reconciler", "payments");
+    assert_padded_node(&state, "payment-reconciler", "commerce");
+    let grown = state.positions.clone();
+    state.reload(&path);
+    assert_eq!(state.positions, grown);
+}
+
+fn assert_padded_node(state: &ViewerState, node: &str, container: &str) {
+    use sysy_layout::{CONTAINER_PADDING, Rect, geometry::element_rect};
+    let frame = element_rect(container, &state.positions[container], &state.design);
+    let rect = element_rect(node, &state.positions[node], &state.design);
+    assert!(frame.contains(Rect::new(
+        rect.origin.x - CONTAINER_PADDING,
+        rect.origin.y - CONTAINER_PADDING,
+        rect.size.width + 2.0 * CONTAINER_PADDING,
+        rect.size.height + 2.0 * CONTAINER_PADDING
+    )));
 }

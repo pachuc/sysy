@@ -180,3 +180,53 @@ fn concurrent_creation_has_one_winner_and_a_complete_file() {
     assert_eq!(load(path).unwrap().title, winner);
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
 }
+
+#[test]
+fn design_metadata_updates_preserve_architecture_and_layout() {
+    let mut design = fixture();
+    let original = design.clone();
+    let returned = design
+        .set(sysy_core::DesignUpdate {
+            title: Some("Revised checkout".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(returned, design);
+    assert_eq!(design.title, "Revised checkout");
+    assert_eq!(design.description, original.description);
+    design
+        .set(sysy_core::DesignUpdate {
+            description: OptionalUpdate::Set("New scope".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(design.description.as_deref(), Some("New scope"));
+    design
+        .set(sysy_core::DesignUpdate {
+            description: OptionalUpdate::Clear,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(design.description, None);
+    assert_eq!(design.nodes, original.nodes);
+    assert_eq!(design.containers, original.containers);
+    assert_eq!(design.edges, original.edges);
+    assert_eq!(design.notes, original.notes);
+    assert_eq!(design.layout, original.layout);
+    let before = design.clone();
+    assert_eq!(
+        design.set(sysy_core::DesignUpdate::default()).unwrap(),
+        before
+    );
+    design.nodes[0].container = Some("missing".into());
+    let before = design.clone();
+    assert!(
+        design
+            .set(sysy_core::DesignUpdate {
+                title: Some("Rejected".into()),
+                ..Default::default()
+            })
+            .is_err()
+    );
+    assert_eq!(design, before);
+}

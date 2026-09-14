@@ -21,6 +21,13 @@ impl<T> OptionalUpdate<T> {
     }
 }
 
+/// Changes to design metadata; omitted fields preserve their current values.
+#[derive(Clone, Debug, Default)]
+pub struct DesignUpdate {
+    pub title: Option<String>,
+    pub description: OptionalUpdate<String>,
+}
+
 /// Fields to change; `None` preserves the current value.
 /// Optional fields use `OptionalUpdate` to distinguish setting and clearing.
 #[derive(Clone, Debug, Default)]
@@ -72,6 +79,20 @@ impl Design {
         }
         *self = candidate;
         Ok(record)
+    }
+
+    /// Update metadata without changing architecture or saved positions.
+    ///
+    /// # Errors
+    /// Returns all validation problems, leaving the design unchanged.
+    pub fn set(&mut self, update: DesignUpdate) -> Result<Self, Error> {
+        self.edit(|design| {
+            if let Some(title) = update.title {
+                design.title = title;
+            }
+            update.description.apply(&mut design.description);
+            Ok(design.clone())
+        })
     }
 
     /// Add a node and validate the whole design.

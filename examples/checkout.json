@@ -1,0 +1,331 @@
+{
+  "version": 1,
+  "design": {
+    "title": "Online checkout",
+    "description": "Order placement, payment authorization, and asynchronous fulfillment."
+  },
+  "containers": [
+    {
+      "id": "commerce",
+      "label": "Commerce platform"
+    },
+    {
+      "id": "fulfillment",
+      "label": "Fulfillment platform"
+    },
+    {
+      "id": "payments",
+      "label": "Payment boundary",
+      "parent": "commerce"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "archive",
+      "kind": "storage",
+      "label": "Receipt archive",
+      "container": "fulfillment"
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "label": "Catalog cache",
+      "container": "commerce"
+    },
+    {
+      "id": "catalog",
+      "kind": "service",
+      "label": "Product catalog",
+      "container": "commerce"
+    },
+    {
+      "id": "checkout",
+      "kind": "service",
+      "label": "Checkout API",
+      "description": "Coordinates pricing, payment, and the order outbox.",
+      "container": "commerce"
+    },
+    {
+      "id": "events",
+      "kind": "queue",
+      "label": "Order events",
+      "container": "fulfillment"
+    },
+    {
+      "id": "gateway",
+      "kind": "service",
+      "label": "API gateway",
+      "container": "commerce"
+    },
+    {
+      "id": "inventory",
+      "kind": "service",
+      "label": "Inventory service",
+      "container": "fulfillment"
+    },
+    {
+      "id": "ledger",
+      "kind": "database",
+      "label": "Payment ledger",
+      "container": "payments"
+    },
+    {
+      "id": "orders",
+      "kind": "database",
+      "label": "Orders database",
+      "container": "commerce"
+    },
+    {
+      "id": "payment",
+      "kind": "service",
+      "label": "Payment service",
+      "container": "payments"
+    },
+    {
+      "id": "processor",
+      "kind": "external",
+      "label": "Payment processor"
+    },
+    {
+      "id": "receipt",
+      "kind": "function",
+      "label": "Receipt generator",
+      "container": "fulfillment"
+    },
+    {
+      "id": "shopper",
+      "kind": "client",
+      "label": "Shopper browser"
+    },
+    {
+      "id": "warehouse",
+      "kind": "database",
+      "label": "Stock database",
+      "container": "fulfillment"
+    }
+  ],
+  "edges": [
+    {
+      "id": "authorize",
+      "from": "checkout",
+      "to": "payment",
+      "kind": "sync",
+      "label": "Authorize payment"
+    },
+    {
+      "id": "browse",
+      "from": "shopper",
+      "to": "gateway",
+      "kind": "sync",
+      "label": "Browse products"
+    },
+    {
+      "id": "cached-products",
+      "from": "catalog",
+      "to": "cache",
+      "kind": "data",
+      "label": "Read product cache"
+    },
+    {
+      "id": "charge",
+      "from": "payment",
+      "to": "processor",
+      "kind": "sync",
+      "label": "Charge token"
+    },
+    {
+      "id": "create-receipt",
+      "from": "events",
+      "to": "receipt",
+      "kind": "async",
+      "label": "Generate receipt"
+    },
+    {
+      "id": "find-products",
+      "from": "gateway",
+      "to": "catalog",
+      "kind": "sync",
+      "label": "Find products"
+    },
+    {
+      "id": "payment-contract",
+      "from": "commerce",
+      "to": "processor",
+      "kind": "dependency",
+      "label": "Merchant account"
+    },
+    {
+      "id": "place-order",
+      "from": "gateway",
+      "to": "checkout",
+      "kind": "sync",
+      "label": "Place order"
+    },
+    {
+      "id": "price-order",
+      "from": "checkout",
+      "to": "catalog",
+      "kind": "sync",
+      "label": "Check prices"
+    },
+    {
+      "id": "publish-order",
+      "from": "checkout",
+      "to": "events",
+      "kind": "async",
+      "label": "Order placed"
+    },
+    {
+      "id": "read-order",
+      "from": "receipt",
+      "to": "orders",
+      "kind": "data",
+      "label": "Read order details"
+    },
+    {
+      "id": "record-charge",
+      "from": "payment",
+      "to": "ledger",
+      "kind": "data",
+      "label": "Record charge"
+    },
+    {
+      "id": "reserve-stock",
+      "from": "events",
+      "to": "inventory",
+      "kind": "async",
+      "label": "Reserve stock"
+    },
+    {
+      "id": "save-order",
+      "from": "checkout",
+      "to": "orders",
+      "kind": "data",
+      "label": "Persist order"
+    },
+    {
+      "id": "store-receipt",
+      "from": "receipt",
+      "to": "archive",
+      "kind": "data",
+      "label": "Store PDF"
+    },
+    {
+      "id": "update-stock",
+      "from": "inventory",
+      "to": "warehouse",
+      "kind": "data",
+      "label": "Update quantities"
+    }
+  ],
+  "notes": [
+    {
+      "id": "delivery",
+      "text": "Consumers deduplicate order IDs.",
+      "on": "publish-order"
+    },
+    {
+      "id": "idempotency",
+      "text": "Retry with the same order key.",
+      "on": "payment"
+    },
+    {
+      "id": "scope",
+      "text": "Refunds and returns are outside this view."
+    }
+  ],
+  "layout": {
+    "archive": {
+      "x": 2240.0,
+      "y": 408.0
+    },
+    "cache": {
+      "x": 1792.0,
+      "y": 0.0
+    },
+    "catalog": {
+      "x": 1344.0,
+      "y": 0.0
+    },
+    "checkout": {
+      "x": 896.0,
+      "y": 0.0
+    },
+    "commerce": {
+      "x": 416.0,
+      "y": -32.0,
+      "size": {
+        "width": 2040.0,
+        "height": 264.0
+      }
+    },
+    "delivery": {
+      "x": 1216.0,
+      "y": 252.0
+    },
+    "events": {
+      "x": 1344.0,
+      "y": 408.0
+    },
+    "fulfillment": {
+      "x": 1312.0,
+      "y": 272.0,
+      "size": {
+        "width": 1144.0,
+        "height": 336.0
+      }
+    },
+    "gateway": {
+      "x": 448.0,
+      "y": 0.0
+    },
+    "idempotency": {
+      "x": 1544.0,
+      "y": 104.0
+    },
+    "inventory": {
+      "x": 1792.0,
+      "y": 408.0
+    },
+    "ledger": {
+      "x": 1792.0,
+      "y": 104.0
+    },
+    "orders": {
+      "x": 2240.0,
+      "y": 0.0
+    },
+    "payment": {
+      "x": 1344.0,
+      "y": 104.0
+    },
+    "payments": {
+      "x": 1312.0,
+      "y": 72.0,
+      "size": {
+        "width": 688.0,
+        "height": 128.0
+      }
+    },
+    "processor": {
+      "x": 2688.0,
+      "y": 0.0
+    },
+    "receipt": {
+      "x": 1792.0,
+      "y": 512.0
+    },
+    "scope": {
+      "x": 2928.0,
+      "y": -32.0
+    },
+    "shopper": {
+      "x": 0.0,
+      "y": 0.0
+    },
+    "warehouse": {
+      "x": 2240.0,
+      "y": 304.0
+    }
+  }
+}

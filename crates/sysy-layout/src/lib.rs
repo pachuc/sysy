@@ -5,6 +5,7 @@
 //! spacing: overlapping pins, or a child pinned above or left of its pinned
 //! parent's padded interior, cannot be repaired without moving a pin.
 
+pub mod edges;
 pub mod geometry;
 mod layers;
 mod pins;

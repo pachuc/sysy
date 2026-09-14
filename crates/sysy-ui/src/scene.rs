@@ -1,6 +1,8 @@
 //! Drawing and interaction in world coordinates, without a window.
 
 use sysy_core::{Design, EdgeKind, Layout, NodeKind};
+pub use sysy_layout::edges::boundary;
+use sysy_layout::edges::{EdgeGeometry, edge_geometry};
 use sysy_layout::geometry::{Point, Rect, Size, element_rect};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,6 +34,7 @@ pub struct Label {
     pub rect: Rect,
     pub font_size: f64,
     pub centered: bool,
+    pub background: Option<Rect>,
 }
 
 #[derive(Clone, Debug)]
@@ -88,6 +91,7 @@ fn label(text: &str, rect: Rect, font_size: f64, centered: bool) -> Label {
         rect,
         font_size,
         centered,
+        background: None,
     }
 }
 
@@ -107,29 +111,6 @@ fn inset(rect: Rect, amount: f64) -> Rect {
         (rect.size.width - 2.0 * amount).max(1.0),
         (rect.size.height - 2.0 * amount).max(1.0),
     )
-}
-
-/// Intersect the ray from the rectangle's center toward `toward` with its boundary.
-#[must_use]
-pub fn boundary(rect: Rect, toward: Point) -> Point {
-    let c = center(rect);
-    let dx = toward.x - c.x;
-    let dy = toward.y - c.y;
-    if dx.abs() + dy.abs() < f64::EPSILON {
-        return point(rect.right(), c.y);
-    }
-    let tx = if dx.abs() < f64::EPSILON {
-        f64::INFINITY
-    } else {
-        rect.size.width / (2.0 * dx.abs())
-    };
-    let ty = if dy.abs() < f64::EPSILON {
-        f64::INFINITY
-    } else {
-        rect.size.height / (2.0 * dy.abs())
-    };
-    let t = tx.min(ty);
-    point(c.x + dx * t, c.y + dy * t)
 }
 
 fn distance(a: Point, b: Point) -> f64 {
@@ -182,29 +163,8 @@ fn points_bounds(points: &[Point]) -> Rect {
         .unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0))
 }
 
-fn edge_shape(edge: &sysy_core::Edge, from: Rect, to: Rect, offset: f64) -> Shape {
-    let route = if edge.from == edge.to || distance(center(from), center(to)) < 0.001 {
-        vec![
-            point(from.right(), center(from).y),
-            point(from.right() + 32.0, center(from).y),
-            point(from.right() + 32.0, from.origin.y - 24.0),
-            point(center(to).x, from.origin.y - 24.0),
-            point(center(to).x, to.origin.y),
-        ]
-    } else if offset.abs() > f64::EPSILON {
-        let a = center(from);
-        let b = center(to);
-        let length = distance(a, b);
-        // Use a canonical direction so reverse edges get distinct routes too.
-        let direction = if edge.from < edge.to { 1.0 } else { -1.0 };
-        let bend = point(
-            a.x.midpoint(b.x) - (b.y - a.y) / length * offset * direction,
-            a.y.midpoint(b.y) + (b.x - a.x) / length * offset * direction,
-        );
-        vec![boundary(from, bend), bend, boundary(to, bend)]
-    } else {
-        vec![boundary(from, center(to)), boundary(to, center(from))]
-    };
+fn edge_shape(edge: &sysy_core::Edge, geometry: EdgeGeometry) -> Shape {
+    let route = geometry.route;
     let mut shape = box_shape(&edge.id, ShapeKind::Edge(edge.kind), points_bounds(&route));
     let width = if edge.kind == EdgeKind::Data {
         3.5
@@ -228,29 +188,21 @@ fn edge_shape(edge: &sysy_core::Edge, from: Rect, to: Rect, offset: f64) -> Shap
         shape.bounds = shape.bounds.union(points_bounds(head));
         shape.primitives.push(Primitive::Polygon(head.to_vec()));
     }
-    if let Some(text) = edge.label.as_deref().filter(|s| !s.is_empty()) {
-        let anchor = route_midpoint(&route);
-        let width = text.chars().take(40).fold(16.0_f64, |w, _| w + 7.0);
-        let rect = Rect::new(anchor.x - width / 2.0, anchor.y - 12.0, width, 24.0);
+    if let (Some(text), Some(rect)) = (&edge.label, geometry.label) {
+        if !rect.contains_point(geometry.anchor) {
+            shape.primitives.push(stroke(
+                vec![geometry.anchor, boundary(rect, geometry.anchor)],
+                1.0,
+            ));
+        }
         shape.bounds = shape.bounds.union(rect);
-        shape.primitives.push(rectangle(rect, true, false));
-        shape.labels.push(label(text, inset(rect, 3.0), 12.0, true));
+        let mut text = label(text, inset(rect, 3.0), 12.0, true);
+        text.background = Some(rect);
+        shape.labels.push(text);
     }
     shape.route = route;
     shape.endpoints = Some((edge.from.clone(), edge.to.clone()));
     shape
-}
-
-fn route_midpoint(route: &[Point]) -> Point {
-    let mut remaining = route.windows(2).map(|p| distance(p[0], p[1])).sum::<f64>() / 2.0;
-    for pair in route.windows(2) {
-        let length = distance(pair[0], pair[1]);
-        if remaining <= length {
-            return along(pair[0], pair[1], remaining / length.max(0.001));
-        }
-        remaining -= length;
-    }
-    route.first().copied().unwrap_or_default()
 }
 
 fn arc(c: Point, rx: f64, ry: f64, start: f64, end: f64) -> Vec<Point> {
@@ -405,30 +357,32 @@ fn edge_kind_name(kind: EdgeKind) -> &'static str {
     }
 }
 
-fn edge_offsets(design: &Design) -> std::collections::BTreeMap<&str, f64> {
-    let mut groups = std::collections::BTreeMap::<_, Vec<_>>::new();
-    for edge in &design.edges {
-        let pair = if edge.from < edge.to {
-            (&edge.from, &edge.to)
-        } else {
-            (&edge.to, &edge.from)
-        };
-        groups.entry(pair).or_default().push(edge.id.as_str());
-    }
-    let mut offsets = std::collections::BTreeMap::new();
-    for group in groups.values_mut() {
-        group.sort_unstable();
-        let count = group.iter().fold(0.0, |n, _| n + 1.0);
-        let mut offset = -(count - 1.0) * 28.0;
-        for id in group {
-            offsets.insert(*id, offset);
-            offset += 56.0;
-        }
-    }
-    offsets
+/// Edge labels paint above all routes, while nodes and notes keep their foreground order.
+pub enum PaintItem<'a> {
+    Shape(&'a Shape),
+    EdgeLabels(&'a Shape),
 }
 
 impl Scene {
+    pub fn paint_order(&self) -> impl Iterator<Item = PaintItem<'_>> {
+        self.shapes
+            .iter()
+            .filter(|shape| matches!(shape.kind, ShapeKind::Container | ShapeKind::Edge(_)))
+            .map(PaintItem::Shape)
+            .chain(
+                self.shapes
+                    .iter()
+                    .filter(|shape| matches!(shape.kind, ShapeKind::Edge(_)))
+                    .map(PaintItem::EdgeLabels),
+            )
+            .chain(
+                self.shapes
+                    .iter()
+                    .filter(|shape| matches!(shape.kind, ShapeKind::Node(_) | ShapeKind::Note))
+                    .map(PaintItem::Shape),
+            )
+    }
+
     /// Build from a validated design and the complete result of `sysy_layout::layout`.
     #[must_use]
     pub fn build(design: &Design, layout: &Layout) -> Self {
@@ -466,12 +420,10 @@ impl Scene {
                 scene.shapes.push(shape);
             }
         }
-        let offsets = edge_offsets(design);
+        let mut edges = edge_geometry(design, layout);
         for edge in &design.edges {
-            if let (Some(from), Some(to)) = (rect(&edge.from), rect(&edge.to)) {
-                scene
-                    .shapes
-                    .push(edge_shape(edge, from, to, offsets[edge.id.as_str()]));
+            if let Some(geometry) = edges.remove(&edge.id) {
+                scene.shapes.push(edge_shape(edge, geometry));
             }
         }
         for node in &design.nodes {
@@ -508,11 +460,21 @@ impl Scene {
     /// Return the last painted element under the cursor; tolerance is in world units.
     #[must_use]
     pub fn hit_test(&self, point: Point, tolerance: f64) -> Option<&str> {
+        let edge_label = self.shapes.iter().rev().find(|shape| {
+            matches!(shape.kind, ShapeKind::Edge(_))
+                && shape
+                    .labels
+                    .iter()
+                    .any(|label| label.rect.contains_point(point))
+        });
         self.shapes
             .iter()
             .rev()
             .find(|shape| {
                 if matches!(shape.kind, ShapeKind::Edge(_)) {
+                    if let Some(label) = edge_label {
+                        return shape.id == label.id;
+                    }
                     shape
                         .labels
                         .iter()

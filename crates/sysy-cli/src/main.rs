@@ -1,3 +1,5 @@
+mod summary;
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -6,8 +8,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sysy_core::{
-    Container, ContainerUpdate, Design, Edge, EdgeKind, EdgeUpdate, Node, NodeKind, NodeUpdate,
-    Note, NoteUpdate, OptionalUpdate,
+    Container, ContainerUpdate, Design, DesignUpdate, Edge, EdgeKind, EdgeUpdate, Node, NodeKind,
+    NodeUpdate, Note, NoteUpdate, OptionalUpdate,
 };
 
 #[derive(Parser)]
@@ -31,6 +33,17 @@ enum Command {
         title: String,
         #[arg(long)]
         description: Option<String>,
+    },
+    /// Change the design title or description, preserving other fields
+    Set {
+        path: PathBuf,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long, conflicts_with = "clear_description")]
+        description: Option<String>,
+        /// Clear the optional description
+        #[arg(long)]
+        clear_description: bool,
     },
     /// Add, edit, remove, or list nodes
     Node {
@@ -339,11 +352,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            if cli.json {
-                eprintln!("{}", json!({"error": {"message": error.to_string()}}));
-            } else {
-                eprintln!("Error: {error}");
-            }
+            eprintln!("{}", json!({"error": {"message": error.to_string()}}));
             ExitCode::FAILURE
         }
     }
@@ -385,6 +394,21 @@ fn run(command: Command) -> Result<Output> {
             sysy_core::create(&path, &design)?;
             output(&design, format!("Created {}", path.display()))
         }
+        Command::Set {
+            path,
+            title,
+            description,
+            clear_description,
+        } => mutate(
+            &path,
+            |design| {
+                design.set(DesignUpdate {
+                    title,
+                    description: optional(description, clear_description),
+                })
+            },
+            "Updated design",
+        ),
         Command::Ui { path } => {
             sysy_ui::run(&path)?;
             output(json!({"path": path}), "Viewer closed")
@@ -403,14 +427,7 @@ fn run(command: Command) -> Result<Output> {
         }
         Command::Show { path } => {
             let design = sysy_core::load(path)?;
-            let message = format!(
-                "{}: {} nodes, {} containers, {} edges, {} notes",
-                design.title,
-                design.nodes.len(),
-                design.containers.len(),
-                design.edges.len(),
-                design.notes.len()
-            );
+            let message = summary::design_summary(&design);
             output(design, message)
         }
         Command::Validate { path } => {
