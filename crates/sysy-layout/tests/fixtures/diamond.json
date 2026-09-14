@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "design": {
+    "title": "diamond"
+  },
+  "containers": [],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c"
+    },
+    {
+      "id": "d",
+      "kind": "service",
+      "label": "d"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    },
+    {
+      "id": "ac",
+      "from": "a",
+      "to": "c",
+      "kind": "sync"
+    },
+    {
+      "id": "bd",
+      "from": "b",
+      "to": "d",
+      "kind": "sync"
+    },
+    {
+      "id": "cd",
+      "from": "c",
+      "to": "d",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {}
+}

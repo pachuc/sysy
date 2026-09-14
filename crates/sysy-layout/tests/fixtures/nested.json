@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "design": {
+    "title": "nested"
+  },
+  "containers": [
+    {
+      "id": "empty",
+      "label": "empty",
+      "parent": "middle"
+    },
+    {
+      "id": "inner",
+      "label": "inner",
+      "parent": "middle"
+    },
+    {
+      "id": "middle",
+      "label": "middle",
+      "parent": "outer"
+    },
+    {
+      "id": "other",
+      "label": "other"
+    },
+    {
+      "id": "outer",
+      "label": "outer"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a",
+      "container": "inner"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b",
+      "container": "inner"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c",
+      "container": "middle"
+    },
+    {
+      "id": "d",
+      "kind": "service",
+      "label": "d",
+      "container": "outer"
+    },
+    {
+      "id": "e",
+      "kind": "service",
+      "label": "e",
+      "container": "other"
+    },
+    {
+      "id": "f",
+      "kind": "service",
+      "label": "f"
+    },
+    {
+      "id": "g",
+      "kind": "service",
+      "label": "g",
+      "container": "other"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    },
+    {
+      "id": "bc",
+      "from": "b",
+      "to": "c",
+      "kind": "sync"
+    },
+    {
+      "id": "cd",
+      "from": "c",
+      "to": "d",
+      "kind": "sync"
+    },
+    {
+      "id": "de",
+      "from": "d",
+      "to": "e",
+      "kind": "sync"
+    },
+    {
+      "id": "ef",
+      "from": "e",
+      "to": "f",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {}
+}

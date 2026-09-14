@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "design": {
+    "title": "Growth near other pins"
+  },
+  "containers": [
+    {
+      "id": "box",
+      "label": "Box"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a",
+      "container": "box"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b",
+      "container": "box"
+    },
+    {
+      "id": "outside",
+      "kind": "service",
+      "label": "Outside"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {
+    "a": {
+      "x": 0,
+      "y": 0
+    },
+    "box": {
+      "x": -32,
+      "y": -32,
+      "size": {
+        "width": 184,
+        "height": 128
+      }
+    },
+    "outside": {
+      "x": 384,
+      "y": 0
+    }
+  }
+}

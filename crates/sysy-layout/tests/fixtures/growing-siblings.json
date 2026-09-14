@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "design": {
+    "title": "Two growing pinned containers"
+  },
+  "containers": [
+    {
+      "id": "left",
+      "label": "Left"
+    },
+    {
+      "id": "right",
+      "label": "Right"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a",
+      "container": "left"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b",
+      "container": "left"
+    },
+    {
+      "id": "c",
+      "kind": "service",
+      "label": "c",
+      "container": "right"
+    },
+    {
+      "id": "d",
+      "kind": "service",
+      "label": "d",
+      "container": "right"
+    },
+    {
+      "id": "e",
+      "kind": "service",
+      "label": "e",
+      "container": "right"
+    },
+    {
+      "id": "f",
+      "kind": "service",
+      "label": "f",
+      "container": "right"
+    },
+    {
+      "id": "g",
+      "kind": "service",
+      "label": "g",
+      "container": "right"
+    },
+    {
+      "id": "h",
+      "kind": "service",
+      "label": "h",
+      "container": "right"
+    },
+    {
+      "id": "i",
+      "kind": "service",
+      "label": "i",
+      "container": "right"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    }
+  ],
+  "notes": [],
+  "layout": {
+    "a": {
+      "x": 32,
+      "y": 532
+    },
+    "c": {
+      "x": 532,
+      "y": 32
+    },
+    "left": {
+      "x": 0,
+      "y": 500,
+      "size": {
+        "width": 184,
+        "height": 128
+      }
+    },
+    "right": {
+      "x": 500,
+      "y": 0,
+      "size": {
+        "width": 184,
+        "height": 128
+      }
+    }
+  }
+}

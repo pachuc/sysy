@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "design": {
+    "title": "notes"
+  },
+  "containers": [
+    {
+      "id": "box",
+      "label": "box"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "service",
+      "label": "a",
+      "container": "box"
+    },
+    {
+      "id": "b",
+      "kind": "service",
+      "label": "b"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a",
+      "to": "b",
+      "kind": "sync"
+    }
+  ],
+  "notes": [
+    {
+      "id": "free-a",
+      "text": "Unattached note"
+    },
+    {
+      "id": "free-b",
+      "text": "Second unattached note\nWith another line"
+    },
+    {
+      "id": "on-container",
+      "text": "Container callout",
+      "on": "box"
+    },
+    {
+      "id": "on-edge",
+      "text": "Edge callout",
+      "on": "ab"
+    },
+    {
+      "id": "on-node",
+      "text": "Node callout",
+      "on": "a"
+    },
+    {
+      "id": "pinned-note",
+      "text": "Pinned note"
+    }
+  ],
+  "layout": {
+    "pinned-note": {
+      "x": -320.5,
+      "y": -200.25
+    }
+  }
+}
