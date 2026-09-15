@@ -5,11 +5,11 @@ use std::{
 };
 
 use gpui::{
-    App, Application, BorderStyle, Bounds, ContentMask, Context, DispatchPhase, Div, FocusHandle,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Path, Pixels, Point,
-    ScrollDelta, ScrollWheelEvent, SharedString, Stateful, TextAlign, TextRun, Window,
-    WindowBounds, WindowOptions, canvas, div, fill, point, prelude::*, px, quad, rgb, size,
-    transparent_black,
+    App, Application, BorderStyle, Bounds, ClickEvent, ClipboardItem, ContentMask, Context,
+    DispatchPhase, Div, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Path, Pixels, Point, ScrollDelta, ScrollWheelEvent, SharedString, Stateful,
+    TextAlign, TextRun, Window, WindowBounds, WindowOptions, canvas, div, fill, point, prelude::*,
+    px, quad, rgb, size, transparent_black,
 };
 use sysy_core::NodeKind;
 use sysy_layout::{Point as WorldPoint, Rect, Size};
@@ -34,6 +34,8 @@ struct Viewer {
     hovered: Option<String>,
     pan_start: Option<Point<Pixels>>,
     focus: FocusHandle,
+    /// Heading of the detail field most recently copied to the clipboard.
+    copied: Option<String>,
 }
 
 impl Viewer {
@@ -72,6 +74,7 @@ impl Viewer {
             hovered: None,
             pan_start: None,
             focus: cx.focus_handle(),
+            copied: None,
         }
     }
 
@@ -123,6 +126,7 @@ impl Viewer {
     fn mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus);
         self.document.state.selected = self.hit(event.position);
+        self.copied = None;
         self.pan_start = self
             .document
             .state
@@ -269,26 +273,81 @@ impl Viewer {
             )
     }
 
-    fn panel(&self) -> Stateful<Div> {
-        let fields = self
-            .document
+    fn detail_fields(&self) -> Option<Vec<(String, String)>> {
+        self.document
             .state
             .selected
             .as_deref()
-            .and_then(|id| detail_text(&self.document.state.design, id));
-        let content = if let Some(fields) = fields {
+            .and_then(|id| detail_text(&self.document.state.design, id))
+    }
+
+    fn copy(&mut self, heading: String, text: String, cx: &mut Context<Self>) {
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
+        self.copied = Some(heading);
+        cx.notify();
+    }
+
+    /// Copy every detail field of the selected element as "heading: text" lines.
+    fn copy_all(&mut self, cx: &mut Context<Self>) {
+        if let Some(fields) = self.detail_fields() {
+            let text = fields
+                .iter()
+                .map(|(heading, text)| format!("{heading}: {text}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            self.copy("all fields".into(), text, cx);
+        }
+    }
+
+    fn panel(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let muted = rgb(0x0094_a3b8);
+        let content = if let Some(fields) = self.detail_fields() {
             div()
                 .flex()
                 .flex_col()
-                .gap_4()
-                .children(fields.into_iter().map(|(heading, text)| {
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(div().text_xs().text_color(rgb(0x0064_748b)).child(heading))
-                        .child(div().text_sm().child(text))
-                }))
+                .gap_3()
+                .children(
+                    fields
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, (heading, text))| {
+                            let copied = self.copied.as_deref() == Some(heading.as_str());
+                            let (heading_for_click, text_for_click) =
+                                (heading.clone(), text.clone());
+                            div()
+                                .id(("field", index))
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .px_2()
+                                .py_1()
+                                .rounded_md()
+                                .cursor_pointer()
+                                .hover(|style| style.bg(rgb(0x0026_2626)))
+                                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                    this.copy(
+                                        heading_for_click.clone(),
+                                        text_for_click.clone(),
+                                        cx,
+                                    );
+                                }))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(div().text_xs().text_color(muted).child(heading))
+                                        .when(copied, |row| {
+                                            row.child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(rgb(0x0086_efac))
+                                                    .child("copied"),
+                                            )
+                                        }),
+                                )
+                                .child(div().text_sm().child(text))
+                        }),
+                )
         } else {
             div()
                 .text_sm()
@@ -301,16 +360,17 @@ impl Viewer {
             .h_full()
             .overflow_y_scroll()
             .p_4()
-            .bg(rgb(0x00ff_ffff))
+            .bg(rgb(0x0000_0000))
+            .text_color(rgb(0x00ff_ffff))
             .border_l_1()
-            .border_color(rgb(0x00cb_d5e1))
+            .border_color(rgb(0x0033_3333))
             .child(div().text_lg().mb_4().child(self.document.state.design.title.clone()))
             .child(div().mb_4().text_xs().text_color(rgb(
-                if self.document.state.error.is_some() { 0x00b9_1c1c } else { 0x0064_748b }
+                if self.document.state.error.is_some() { 0x00f8_7171 } else { 0x0094_a3b8 }
             )).child(self.document.state.status()))
             .child(content)
-            .child(div().mt_6().text_xs().text_color(rgb(0x0064_748b)).child(
-                "Drag nodes or containers to arrange them. Drag empty canvas or scroll to pan. Wheel or Ctrl-scroll to zoom. Press f to fit.",
+            .child(div().mt_6().text_xs().text_color(muted).child(
+                "Drag elements to arrange them. Drag empty canvas or scroll to pan. Wheel or Ctrl-scroll to zoom. Press f to fit. Click a detail to copy it; Ctrl-C copies all details.",
             ))
     }
 }
@@ -326,18 +386,18 @@ impl Render for Viewer {
             .text_color(rgb(0x001e_293b))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if event.keystroke.key == "f"
-                    && !event.keystroke.modifiers.control
-                    && !event.keystroke.modifiers.platform
-                {
+                let modifiers = event.keystroke.modifiers;
+                if event.keystroke.key == "f" && !modifiers.control && !modifiers.platform {
                     let mut shared = this.shared.get();
                     shared.fit_pending = true;
                     this.shared.set(shared);
                     cx.notify();
+                } else if event.keystroke.key == "c" && (modifiers.control || modifiers.platform) {
+                    this.copy_all(cx);
                 }
             }))
             .child(self.graph(cx))
-            .child(self.panel())
+            .child(self.panel(cx))
     }
 }
 

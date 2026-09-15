@@ -70,16 +70,55 @@ fn pack(blocks: &mut [Block]) {
     }
 }
 
+/// Left edge of every layer column. Each column is as wide as its widest node,
+/// plus the gap and room for the container frames that may border it, so a
+/// design is no wider than its content requires.
+fn column_offsets(
+    ranks: &BTreeMap<String, Point>,
+    design: &Design,
+    depth: f64,
+) -> BTreeMap<u64, f64> {
+    let mut widths: BTreeMap<u64, f64> = BTreeMap::new();
+    for (id, rank) in ranks {
+        // Ranks are small nonnegative integers stored as floats.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let column = rank.x.max(0.0) as u64;
+        let width = design
+            .nodes
+            .iter()
+            .find(|node| &node.id == id)
+            .map_or(geometry::NODE_MIN_WIDTH, |node| {
+                node_size(&node.label).width
+            });
+        let entry = widths.entry(column).or_insert(0.0);
+        *entry = entry.max(width);
+    }
+    let last = widths.keys().max().copied().unwrap_or(0);
+    let mut offsets = BTreeMap::new();
+    let mut x = 0.0;
+    for column in 0..=last {
+        offsets.insert(column, x);
+        let width = widths
+            .get(&column)
+            .copied()
+            .unwrap_or(geometry::NODE_MIN_WIDTH);
+        x += width + ELEMENT_GAP + 2.0 * depth * CONTAINER_PADDING;
+    }
+    offsets
+}
+
 fn desired_position(
     id: &str,
     ranks: &BTreeMap<String, Point>,
     paths: &BTreeMap<String, Vec<String>>,
     design: &Design,
-    stride: f64,
+    columns: &BTreeMap<u64, f64>,
 ) -> Point {
     let rank = ranks.get(id).copied().unwrap_or_default();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let column = rank.x.max(0.0) as u64;
     let mut point = Point {
-        x: rank.x * stride,
+        x: columns.get(&column).copied().unwrap_or_default(),
         y: rank.y * (geometry::NODE_HEIGHT + ELEMENT_GAP),
     };
     let mut inset = CONTAINER_PADDING;
@@ -112,6 +151,77 @@ fn leaf(id: &str, size: Size, container: bool, point: Point, design: &Design, or
         anchored: pin.is_some(),
         order,
     }
+}
+
+/// A node together with the unpinned notes attached to it, so frames grow
+/// around the notes and packing keeps them clear of other elements. The notes
+/// go below the node, or above it when the node's outgoing edges head down,
+/// since edges leave from the node's sides and fan toward their targets.
+fn node_block(
+    node: &sysy_core::Node,
+    point: Point,
+    design: &Design,
+    ranks: &BTreeMap<String, Point>,
+    order: f64,
+) -> Block {
+    let mut block = leaf(
+        &node.id,
+        node_size(&node.label),
+        false,
+        point,
+        design,
+        order,
+    );
+    let node_rect = block.rect;
+    let notes: Vec<_> = design
+        .notes
+        .iter()
+        .filter(|note| note.on.as_deref() == Some(node.id.as_str()))
+        .filter(|note| !design.layout.contains_key(&note.id))
+        .collect();
+    if notes.is_empty() {
+        return block;
+    }
+    // Rows are only comparable within a layer, but as a hint for which side of
+    // the node its edges leave toward, the row index is good enough.
+    let row = ranks.get(&node.id).map_or(0.0, |rank| rank.y);
+    let targets_below = design
+        .edges
+        .iter()
+        .filter(|edge| edge.from == node.id)
+        .filter_map(|edge| ranks.get(&edge.to))
+        .filter(|target| target.y > row)
+        .count();
+    let outgoing = design
+        .edges
+        .iter()
+        .filter(|edge| edge.from == node.id)
+        .count();
+    let above = outgoing > 0 && targets_below * 2 > outgoing;
+    let mut y = if above {
+        node_rect.origin.y
+    } else {
+        node_rect.bottom() + NOTE_GAP
+    };
+    for note in notes {
+        let size = note_size(&note.text);
+        if above {
+            y -= size.height + NOTE_GAP;
+        }
+        let rect = Rect {
+            origin: Point {
+                x: node_rect.origin.x,
+                y,
+            },
+            size,
+        };
+        if !above {
+            y = rect.bottom() + NOTE_GAP;
+        }
+        block.rect = block.rect.union(rect);
+        block.entries.insert(note.id.clone(), rect.entry(false));
+    }
+    block
 }
 
 fn frame(
@@ -181,20 +291,13 @@ fn place_elements(design: &Design) -> Layout {
         .unwrap_or_default();
     // Reserve horizontal room for both frames bordering a layer gap. Packing
     // then only moves groups vertically, preserving left-to-right node layers.
-    let stride = geometry::NODE_MAX_WIDTH + ELEMENT_GAP + 2.0 * depth * CONTAINER_PADDING;
+    let columns = column_offsets(&ranks, design, depth);
     let mut blocks = BTreeMap::new();
     for node in &design.nodes {
-        let point = desired_position(&node.id, &ranks, &paths, design, stride);
+        let point = desired_position(&node.id, &ranks, &paths, design, &columns);
         blocks.insert(
             node.id.clone(),
-            leaf(
-                &node.id,
-                node_size(&node.label),
-                false,
-                point,
-                design,
-                ranks[&node.id].y,
-            ),
+            node_block(node, point, design, &ranks, ranks[&node.id].y),
         );
     }
     let mut containers: Vec<_> = design.containers.iter().collect();
@@ -212,7 +315,7 @@ fn place_elements(design: &Design) -> Layout {
             .collect();
         let children: Vec<_> = ids.iter().filter_map(|id| blocks.remove(id)).collect();
         let block = if children.is_empty() {
-            let point = desired_position(&container.id, &ranks, &paths, design, stride);
+            let point = desired_position(&container.id, &ranks, &paths, design, &columns);
             leaf(
                 &container.id,
                 Size {
@@ -241,6 +344,16 @@ fn place_elements(design: &Design) -> Layout {
 fn note_anchor(id: &str, layout: &Layout, design: &Design) -> Option<Point> {
     if let Some(entry) = layout.get(id) {
         let rect = geometry::element_rect(id, entry, design);
+        // Edges leave a node from its right side, so a note there would sit on
+        // top of them. Put the note below the node when it has outgoing edges.
+        let is_node = design.nodes.iter().any(|node| node.id == id);
+        let outgoing = design.edges.iter().any(|edge| edge.from == id);
+        if is_node && outgoing {
+            return Some(Point {
+                x: rect.origin.x,
+                y: rect.bottom() + NOTE_GAP,
+            });
+        }
         return Some(Point {
             x: rect.right() + NOTE_GAP,
             y: rect.origin.y,

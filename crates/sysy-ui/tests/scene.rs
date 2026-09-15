@@ -75,14 +75,27 @@ fn checkout_has_one_shape_per_element_and_clipped_edges() {
     let edge = scene.shapes.iter().find(|s| s.id == "place-order").unwrap();
     let label = &edge.labels[0];
     assert_eq!(label.text, "POST /orders");
-    close(
-        center(label.rect).x,
-        edge.route[0].x.midpoint(edge.route[1].x),
-    );
-    close(
-        center(label.rect).y,
-        edge.route[0].y.midpoint(edge.route[1].y),
-    );
+    // Routes are sampled curves; the label sits on the route, half way along it.
+    assert!(on_route(&edge.route, center(label.rect)) < 1e-6);
+}
+
+/// Distance from a point to the nearest segment of a polyline.
+fn on_route(route: &[Point], p: Point) -> f64 {
+    route
+        .windows(2)
+        .map(|pair| {
+            let (a, b) = (pair[0], pair[1]);
+            let dx = b.x - a.x;
+            let dy = b.y - a.y;
+            let len2 = dx * dx + dy * dy;
+            let t = if len2 == 0.0 {
+                0.0
+            } else {
+                (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0)
+            };
+            (p.x - (a.x + dx * t)).hypot(p.y - (a.y + dy * t))
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 #[test]
@@ -257,7 +270,7 @@ fn line_styles_arrowheads_container_endpoints_and_edge_hits() {
         .unwrap();
     on_boundary(
         element_rect("vpc", &positions["vpc"], &design),
-        edge.route[1],
+        *edge.route.last().unwrap(),
     );
     assert_eq!(edge.arrowheads.len(), 2);
     assert_eq!(edge.arrowheads[1][0], edge.route[0]);

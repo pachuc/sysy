@@ -144,6 +144,54 @@ pub fn line_segments(a: Point, b: Point, kind: EdgeKind) -> Vec<Vec<Point>> {
     segments
 }
 
+/// Split a whole polyline into dashes with one continuous phase, so a curve
+/// sampled into many short segments still shows an even pattern.
+#[must_use]
+pub fn polyline_segments(route: &[Point], kind: EdgeKind) -> Vec<Vec<Point>> {
+    let (dash, gap) = match kind {
+        EdgeKind::Sync | EdgeKind::Data => return vec![route.to_vec()],
+        EdgeKind::Async => (10.0, 6.0),
+        EdgeKind::Dependency => (2.0, 5.0),
+    };
+    let total: f64 = route.windows(2).map(|p| distance(p[0], p[1])).sum();
+    let unit = (total / 100_000.0).max(1.0);
+    let mut segments = Vec::new();
+    let mut dash_start = 0.0;
+    while dash_start < total {
+        let dash_end = (dash_start + dash * unit).min(total);
+        let mut piece = Vec::new();
+        let mut walked = 0.0;
+        for pair in route.windows(2) {
+            let length = distance(pair[0], pair[1]);
+            let seg_start = walked;
+            let seg_end = walked + length;
+            walked = seg_end;
+            if seg_end < dash_start || seg_start > dash_end || length <= 0.0 {
+                continue;
+            }
+            let from = along(
+                pair[0],
+                pair[1],
+                ((dash_start - seg_start) / length).clamp(0.0, 1.0),
+            );
+            let to = along(
+                pair[0],
+                pair[1],
+                ((dash_end - seg_start) / length).clamp(0.0, 1.0),
+            );
+            if piece.is_empty() {
+                piece.push(from);
+            }
+            piece.push(to);
+        }
+        if piece.len() >= 2 {
+            segments.push(piece);
+        }
+        dash_start += (dash + gap) * unit;
+    }
+    segments
+}
+
 fn arrow(tail: Point, tip: Point) -> [Point; 3] {
     let length = distance(tail, tip).max(0.001);
     let dx = (tip.x - tail.x) / length;
@@ -171,13 +219,11 @@ fn edge_shape(edge: &sysy_core::Edge, geometry: EdgeGeometry) -> Shape {
     } else {
         1.8
     };
-    for pair in route.windows(2) {
-        shape.primitives.extend(
-            line_segments(pair[0], pair[1], edge.kind)
-                .into_iter()
-                .map(|points| stroke(points, width)),
-        );
-    }
+    shape.primitives.extend(
+        polyline_segments(&route, edge.kind)
+            .into_iter()
+            .map(|points| stroke(points, width)),
+    );
     shape
         .arrowheads
         .push(arrow(route[route.len() - 2], route[route.len() - 1]));

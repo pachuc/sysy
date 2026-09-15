@@ -37,12 +37,15 @@ fn inside(design: &Design, node: &sysy_core::Node, container: &str) -> bool {
 }
 
 fn assert_padding(parent: Rect, child: Rect) {
+    // Saved positions from viewer drags carry floating point noise, so allow a
+    // hair of tolerance rather than demanding bit-exact padding.
+    let slack = 1e-6;
     assert!(
         parent.contains(Rect::new(
-            child.origin.x - CONTAINER_PADDING,
-            child.origin.y - CONTAINER_PADDING,
-            child.size.width + 2.0 * CONTAINER_PADDING,
-            child.size.height + 2.0 * CONTAINER_PADDING,
+            child.origin.x - CONTAINER_PADDING + slack,
+            child.origin.y - CONTAINER_PADDING + slack,
+            child.size.width + 2.0 * CONTAINER_PADDING - 2.0 * slack,
+            child.size.height + 2.0 * CONTAINER_PADDING - 2.0 * slack,
         )),
         "parent {parent:?} does not pad child {child:?}"
     );
@@ -313,12 +316,16 @@ fn generated_graphs_keep_container_groups_clear() {
 fn notes_use_attachments_and_a_separate_column() {
     let design = load(fixture("notes")).unwrap();
     let result = layout(&design);
-    for (note, target) in [("on-node", "a"), ("on-container", "box")] {
-        assert_exact(
-            result[note].x,
-            element_rect(target, &result[target], &design).right() + sysy_layout::NOTE_GAP,
-        );
-    }
+    // Node a has outgoing edges, so its note sits below it, clear of the edges
+    // leaving its right side; the container note stays to the right.
+    let a = element_rect("a", &result["a"], &design);
+    assert_exact(result["on-node"].x, a.origin.x);
+    // A pinned note already sits under a, so the attached note is pushed further down.
+    assert!(result["on-node"].y >= a.bottom() + sysy_layout::NOTE_GAP);
+    assert_exact(
+        result["on-container"].x,
+        element_rect("box", &result["box"], &design).right() + sysy_layout::NOTE_GAP,
+    );
     assert_exact(result["free-a"].x, result["free-b"].x);
     assert!(result["free-b"].y > result["free-a"].y);
     assert!(result["free-a"].x > result["b"].x + node_size("b").width);

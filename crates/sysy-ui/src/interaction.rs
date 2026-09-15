@@ -35,14 +35,25 @@ pub fn dragged_positions(design: &Design, positions: &Layout, id: &str, delta: P
                 ids.insert(node.id.clone());
             }
         }
-    } else if design.nodes.iter().any(|node| node.id == id) {
+    } else if design.nodes.iter().any(|node| node.id == id)
+        || design.notes.iter().any(|note| note.id == id)
+    {
         ids.insert(id.to_owned());
     }
+    // A note annotates an element, so it travels with that element.
+    let moved: Vec<String> = design
+        .notes
+        .iter()
+        .filter(|note| note.on.as_ref().is_some_and(|on| ids.contains(on)))
+        .map(|note| note.id.clone())
+        .collect();
+    ids.extend(moved);
     ids.into_iter()
         .filter_map(|id| {
             let mut entry = *positions.get(&id)?;
-            entry.x += delta.x;
-            entry.y += delta.y;
+            // Whole canvas units keep saved files free of floating point noise.
+            entry.x = (entry.x + delta.x).round();
+            entry.y = (entry.y + delta.y).round();
             Some((id, entry))
         })
         .collect()
