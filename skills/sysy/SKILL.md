@@ -42,6 +42,11 @@ Read [reference.md](reference.md) for exact commands, flags, and kinds.
 
 ## Execute
 
+If `sysy` is not installed, build it from the sysy checkout with
+`cargo build --locked -p sysy-cli`, then put that checkout's `target/debug`
+directory on `PATH`. Building the viewer requires the platform libraries
+listed in the repository's CI workflow. Opening it requires a desktop display.
+
 Use the CLI with `--json` to get records you can inspect. For example, for an
 agreed worker and queue:
 
@@ -59,20 +64,30 @@ Mutations validate before saving. On a failure, read stderr and fix the
 reported problem before continuing. Validation succeeds with `[]`. Command
 errors use JSON, but argument parsing errors use text and exit with code 2.
 
-The current CLI has element commands only. Leave layout empty; automatic
-layout and the viewer will place elements once `sysy layout` and `sysy ui`
-land. Check the generated reference for their availability.
+Finish authoring with `sysy --json layout PATH` to save automatic positions,
+then `sysy ui PATH` to open the viewer. Leave the window open while making
+later CLI edits; the viewer watches the file and reloads them. Drag nodes or
+containers to save their positions. Drag the background or scroll to pan,
+use the wheel or Ctrl-scroll to zoom, and press `f` to fit the design.
+
+Saved layout entries are pins. Later layout runs preserve them and grow
+containers when new contents need room. Use `layout --reset` only when the
+person wants every position recomputed. The viewer places new elements on
+reload; run `layout` to persist those positions and grown container sizes.
 
 ## Read state
 
 Start an edit with `sysy --json show PATH`. Use `node list`, `container list`,
 `edge list`, or `note list` with the path and `--json` to inspect one kind.
-Plain `show` prints only a summary. Inspect existing ids and boundaries before
+Plain `show` prints the title, nested containers and nodes, edges, and notes. Inspect existing ids and boundaries before
 adding anything. Finish with `validate` and `show`, and review the file diff.
 
 ## Keep it current
 
-Update the design alongside the system change. Use `set` to change labels,
+Update the design alongside the system change. Use `sysy set PATH --title TITLE`
+or `--description TEXT` for design metadata, and `--clear-description` to
+remove its optional description. The title is required and has no clear flag.
+Use element `set` commands to change labels,
 descriptions, membership, or connections while keeping existing ids stable.
 Only supplied fields change; `--clear-*` removes optional values. Supplying
 `--tag` to `node set` replaces all tags.

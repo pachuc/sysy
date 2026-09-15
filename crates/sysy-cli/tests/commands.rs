@@ -371,7 +371,7 @@ fn validate_reports_multiple_hand_edited_problems() {
 }
 
 #[test]
-fn clap_errors_exit_two_and_human_output_is_short() {
+fn clap_errors_exit_two_and_json_flag_is_global() {
     let harness = Harness::new();
     let before = fs::read(harness.path()).unwrap();
     for (command, args) in [
@@ -392,8 +392,8 @@ fn clap_errors_exit_two_and_human_output_is_short() {
         .unwrap();
     assert!(human.status.success());
     let text = String::from_utf8(human.stdout).unwrap();
-    assert!(text.starts_with("Checkout:"));
-    assert_eq!(text.lines().count(), 1);
+    assert!(text.starts_with("Checkout\n"));
+    assert!(text.contains("Order placement path."));
     let global = Command::new(env!("CARGO_BIN_EXE_sysy"))
         .args(["note", "list"])
         .arg(harness.path())
@@ -596,4 +596,116 @@ fn layout_grows_pinned_containers_and_reports_invalid_files_without_writing() {
     harness.error(&["layout"], &[]);
     harness.error(&["layout"], &["--reset"]);
     harness.error(&["ui"], &[]);
+}
+
+#[test]
+fn set_updates_metadata_and_clear_description_conflicts_without_writing() {
+    let harness = populated_design();
+    let before = harness.design();
+    let record = harness.ok(&["set"], &["--title", "Updated checkout"]);
+    assert_eq!(record, serde_json::to_value(harness.design()).unwrap());
+    assert_eq!(record["design"]["title"], "Updated checkout");
+    assert_eq!(harness.design().description, before.description);
+    harness.ok(&["set"], &["--description", "Revised scope"]);
+    assert_eq!(
+        harness.design().description.as_deref(),
+        Some("Revised scope")
+    );
+    harness.ok(&["set"], &["--clear-description"]);
+    assert_eq!(harness.design().description, None);
+    let after = harness.design();
+    assert_eq!(after.nodes, before.nodes);
+    assert_eq!(after.containers, before.containers);
+    assert_eq!(after.edges, before.edges);
+    assert_eq!(after.notes, before.notes);
+    assert_eq!(after.layout, before.layout);
+    let bytes = fs::read(harness.path()).unwrap();
+    assert_eq!(
+        harness
+            .run(
+                &["set"],
+                &["--description", "Conflict", "--clear-description"]
+            )
+            .status
+            .code(),
+        Some(2)
+    );
+    assert_eq!(fs::read(harness.path()).unwrap(), bytes);
+    harness.ok(&["set"], &[]);
+    assert_eq!(harness.design(), after);
+}
+
+#[test]
+fn plain_show_describes_nested_architecture_and_json_is_unchanged() {
+    let harness = Harness::empty();
+    let fixture = include_str!("../../../examples/checkout.json");
+    fs::write(harness.path(), fixture).unwrap();
+    let human = Command::new(env!("CARGO_BIN_EXE_sysy"))
+        .arg("show")
+        .arg(harness.path())
+        .output()
+        .unwrap();
+    assert!(human.status.success());
+    let text = String::from_utf8(human.stdout).unwrap();
+    assert!(text.starts_with("Online checkout\n"));
+    assert!(text.contains("Commerce platform [commerce]\n  Payment boundary [payments]\n    Payment ledger [ledger] (database)\n    Payment service [payment] (service)"));
+    assert!(text.contains("  Checkout API [checkout] (service)"));
+    assert!(text.contains("Shopper browser [shopper] (client)"));
+    assert!(text.contains("  checkout -> events (async): Order placed"));
+    assert!(text.contains("  delivery (on publish-order): Consumers deduplicate order IDs."));
+    assert!(text.contains("  scope: Refunds and returns are outside this view."));
+    assert_eq!(
+        harness.ok(&["show"], &[]),
+        serde_json::to_value(harness.design()).unwrap()
+    );
+    // Bidirectional and unlabeled connections remain unambiguous.
+    harness.ok(
+        &["edge", "set"],
+        &["publish-order", "--clear-label", "--bidirectional"],
+    );
+    let human = Command::new(env!("CARGO_BIN_EXE_sysy"))
+        .arg("show")
+        .arg(harness.path())
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8(human.stdout)
+            .unwrap()
+            .contains("  checkout <-> events (async)\n")
+    );
+}
+
+#[test]
+fn runtime_errors_are_json_even_without_the_json_flag() {
+    let harness = Harness::empty();
+    let output = Command::new(env!("CARGO_BIN_EXE_sysy"))
+        .arg("show")
+        .arg(harness.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+    assert!(error["error"]["message"].is_string());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn viewer_reports_a_missing_display_instead_of_waiting_without_a_window() {
+    let harness = Harness::new();
+    let output = Command::new(env!("CARGO_BIN_EXE_sysy"))
+        .args(["--json", "ui"])
+        .arg(harness.path())
+        .env_remove("DISPLAY")
+        .env_remove("WAYLAND_DISPLAY")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("no desktop display")
+    );
 }

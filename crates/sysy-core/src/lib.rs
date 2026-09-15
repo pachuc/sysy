@@ -7,7 +7,7 @@ mod file;
 mod model;
 mod validation;
 
-pub use edit::{ContainerUpdate, EdgeUpdate, NodeUpdate, NoteUpdate, OptionalUpdate};
+pub use edit::{ContainerUpdate, DesignUpdate, EdgeUpdate, NodeUpdate, NoteUpdate, OptionalUpdate};
 pub use file::{Error, VERSION, create, load, save};
 pub use model::{
     Container, Design, Edge, EdgeKind, Layout, LayoutEntry, Node, NodeKind, Note, Size,

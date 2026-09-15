@@ -446,3 +446,86 @@ fn swarmy_example_preserves_every_element_and_separates_parallel_connections() {
         assert!(bottom.x <= 968.0 + 1e-8 && bottom.y <= 668.0 + 1e-8);
     }
 }
+
+#[test]
+fn acceptance_examples_render_shared_labels_without_overlap() {
+    for name in ["checkout", "swarmy"] {
+        let design = sysy_core::load(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("../../examples/{name}.json")),
+        )
+        .unwrap();
+        let positions = layout(&design);
+        let geometry = sysy_layout::edges::edge_geometry(&design, &positions);
+        let scene = Scene::build(&design, &positions);
+        assert_eq!(
+            scene.shapes.len(),
+            design.nodes.len() + design.containers.len() + design.edges.len() + design.notes.len()
+        );
+        for edge in &design.edges {
+            let shape = scene
+                .shapes
+                .iter()
+                .find(|shape| shape.id == edge.id)
+                .unwrap();
+            assert_eq!(shape.route, geometry[&edge.id].route);
+            let label = &shape.labels[0];
+            assert!(geometry[&edge.id].label.unwrap().contains(label.rect));
+            assert_eq!(
+                scene.hit_test(center(label.rect), 0.0),
+                Some(edge.id.as_str())
+            );
+            for other in scene.shapes.iter().filter(|other| other.id != edge.id) {
+                for other_label in &other.labels {
+                    assert!(
+                        !label.rect.intersects(other_label.rect),
+                        "{name}: {} overlaps {}",
+                        edge.id,
+                        other.id
+                    );
+                }
+            }
+        }
+        for node in design
+            .nodes
+            .iter()
+            .filter(|node| node.kind == NodeKind::Client)
+        {
+            let shape = scene
+                .shapes
+                .iter()
+                .find(|shape| shape.id == node.id)
+                .unwrap();
+            let estimated_text = node.label.chars().fold(0.0, |width, _| width + 8.0);
+            assert!(shape.labels[0].rect.size.width >= estimated_text);
+        }
+    }
+}
+
+#[test]
+fn edge_labels_paint_after_every_route_and_before_nodes() {
+    use sysy_ui::scene::PaintItem;
+    let design = example();
+    let scene = Scene::build(&design, &layout(&design));
+    let mut routes = 0;
+    let mut labels = 0;
+    for item in scene.paint_order() {
+        match item {
+            PaintItem::Shape(shape) if matches!(shape.kind, ShapeKind::Edge(_)) => {
+                assert_eq!(labels, 0);
+                routes += 1;
+            }
+            PaintItem::EdgeLabels(shape) => {
+                assert_eq!(routes, design.edges.len());
+                labels += 1;
+                for label in &shape.labels {
+                    assert!(label.background.unwrap().contains(label.rect));
+                }
+            }
+            PaintItem::Shape(shape) if matches!(shape.kind, ShapeKind::Node(_)) => {
+                assert_eq!(labels, design.edges.len());
+            }
+            PaintItem::Shape(_) => {}
+        }
+    }
+}

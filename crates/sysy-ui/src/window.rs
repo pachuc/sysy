@@ -15,7 +15,9 @@ use sysy_core::NodeKind;
 use sysy_layout::{Point as WorldPoint, Rect, Size};
 
 use crate::interaction::LiveDesign;
-use crate::scene::{Camera, Label, Primitive, Scene, Shape, ShapeKind, detail_text, highlighted};
+use crate::scene::{
+    Camera, Label, PaintItem, Primitive, Scene, Shape, ShapeKind, detail_text, highlighted,
+};
 
 #[derive(Clone, Copy, Default)]
 struct Shared {
@@ -246,10 +248,19 @@ impl Viewer {
                                 camera,
                                 origin: area.origin,
                             };
-                            for shape in &scene.shapes {
-                                let active = highlighted(shape, hovered.as_deref())
-                                    || selected.as_deref() == Some(shape.id.as_str());
-                                paint_shape(shape, transform, active, window, cx);
+                            for item in scene.paint_order() {
+                                match item {
+                                    PaintItem::Shape(shape) => {
+                                        let active = highlighted(shape, hovered.as_deref())
+                                            || selected.as_deref() == Some(shape.id.as_str());
+                                        paint_shape(shape, transform, active, window, cx);
+                                    }
+                                    PaintItem::EdgeLabels(shape) => {
+                                        for label in &shape.labels {
+                                            paint_label(label, transform, window, cx);
+                                        }
+                                    }
+                                }
                             }
                         });
                     },
@@ -451,8 +462,10 @@ fn paint_shape(
             ),
         }
     }
-    for label in &shape.labels {
-        paint_label(label, transform, window, cx);
+    if !matches!(shape.kind, ShapeKind::Edge(_)) {
+        for label in &shape.labels {
+            paint_label(label, transform, window, cx);
+        }
     }
 }
 
@@ -491,6 +504,9 @@ fn text_lines(
 }
 
 fn paint_label(label: &Label, transform: Transform, window: &mut Window, cx: &mut App) {
+    if let Some(rect) = label.background {
+        window.paint_quad(fill(transform.rect(rect), rgb(0x00fa_faf7)));
+    }
     let area = transform.rect(label.rect);
     let font_size = pixels(label.font_size * transform.camera.scale);
     if font_size < px(2.0) {

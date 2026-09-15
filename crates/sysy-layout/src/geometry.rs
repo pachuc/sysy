@@ -90,14 +90,14 @@ pub const NODE_MIN_WIDTH: f64 = 120.0;
 pub const NODE_MAX_WIDTH: f64 = 280.0;
 pub const NODE_HEIGHT: f64 = 64.0;
 
-/// Estimate label width using Unicode scalar values, with 32 units of inset.
+/// Estimate label width using Unicode scalar values, with 64 units for insets and a client icon.
 /// The viewer should truncate or wrap labels longer than the maximum width.
 #[must_use]
 pub fn node_size(label: &str) -> Size {
     let width = label
         .chars()
-        .take(31)
-        .fold(32.0_f64, |width, _| width + 8.0);
+        .take(27)
+        .fold(64.0_f64, |width, _| width + 8.0);
     Size {
         width: width.clamp(NODE_MIN_WIDTH, NODE_MAX_WIDTH),
         height: NODE_HEIGHT,

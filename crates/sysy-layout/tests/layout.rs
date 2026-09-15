@@ -357,7 +357,85 @@ fn sizes_are_bounded_and_count_unicode_characters() {
     );
     assert_exact(node_size(&"x".repeat(1000)).width, NODE_MAX_WIDTH);
     assert_eq!(node_size(&"é".repeat(20)), node_size(&"a".repeat(20)));
-    assert_exact(node_size(&"a".repeat(20)).width, 192.0);
+    assert_exact(node_size(&"a".repeat(20)).width, 224.0);
     assert!(note_size("first\nsecond").height > note_size("first").height);
     assert!(note_size(&"x".repeat(29)).height > note_size(&"x".repeat(28)).height);
+}
+
+#[test]
+fn acceptance_examples_have_stable_contained_nodes_and_disjoint_edge_labels() {
+    for name in ["swarmy", "checkout"] {
+        let mut design = load(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../examples/{name}.json")),
+        )
+        .unwrap();
+        for reset in [false, true] {
+            if reset {
+                design.layout.clear();
+            }
+            let positions = layout(&design);
+            assert_geometry(&design, &positions);
+            let edges = sysy_layout::edges::edge_geometry(&design, &positions);
+            for (id, edge) in &edges {
+                let Some(rect) = edge.label else { continue };
+                for (other_id, other) in &edges {
+                    if id != other_id {
+                        assert!(
+                            !other.label.is_some_and(|other| other.intersects(rect)),
+                            "{name}: labels {id} and {other_id} overlap"
+                        );
+                    }
+                }
+                for node in &design.nodes {
+                    assert!(
+                        !rect.intersects(element_rect(&node.id, &positions[&node.id], &design)),
+                        "{name}: label {id} overlaps node {}",
+                        node.id
+                    );
+                }
+            }
+            design.nodes.reverse();
+            design.containers.reverse();
+            design.edges.reverse();
+            design.notes.reverse();
+            assert_eq!(layout(&design), positions);
+            assert_eq!(
+                sysy_layout::edges::edge_geometry(&design, &positions),
+                edges
+            );
+        }
+    }
+}
+
+#[test]
+fn adding_a_node_to_a_saved_nested_container_grows_its_frame() {
+    let mut design =
+        load(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/checkout.json"))
+            .unwrap();
+    design.layout = layout(&design);
+    let before = design.layout.clone();
+    let mut node = design
+        .nodes
+        .iter()
+        .find(|node| node.id == "payment")
+        .unwrap()
+        .clone();
+    node.id = "payment-reconciler".into();
+    node.label = "Payment reconciler".into();
+    design.add_node(node).unwrap();
+    let result = layout(&design);
+    assert_geometry(&design, &result);
+    let old = before["payments"].size.unwrap();
+    let new = result["payments"].size.unwrap();
+    assert!(new.width > old.width || new.height > old.height);
+    design.layout = result.clone();
+    assert_eq!(layout(&design), result);
+}
+
+#[test]
+fn labels_reserve_space_for_the_client_icon_before_reaching_the_width_cap() {
+    for label in ["swarmy CLI", "Shopper browser", "Payment reconciler"] {
+        let estimated_text = label.chars().fold(0.0, |width, _| width + 8.0);
+        assert!(node_size(label).width >= estimated_text + 54.0);
+    }
 }

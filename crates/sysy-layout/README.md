@@ -31,9 +31,17 @@ for an empty layout. Attached notes start just outside their target, or near
 an edge midpoint, and move downward past occupied nodes and notes. Free notes
 form a column to the right. Notes do not enlarge container frames.
 
+`edges::edge_geometry` derives routes and label rectangles from the design and
+computed layout. Labels avoid nodes, notes, container headings, and other
+labels. When no nearby route point is free, a displaced label retains an
+anchor for a line back to the edge. These derived positions are not saved as
+pins, so labels can follow endpoint edits.
+
 ## Fixtures
 
-Designs and their exact JSON layout goldens live in `tests/fixtures`. Tests
+The acceptance examples in `examples/` also exercise node containment and
+edge-label overlap. Designs and their exact JSON layout goldens live in
+`tests/fixtures`. Tests
 check ten repeated layouts, reversed input arrays, pin preservation, overlap,
 padding, growth, and bounds. Refresh goldens deliberately with:
 

@@ -12,6 +12,7 @@ Usage: sysy [OPTIONS] <COMMAND>
 Commands:
   version    Print the version of this CLI
   new        Create an empty design without overwriting an existing file
+  set        Change the design title or description, preserving other fields
   node       Add, edit, remove, or list nodes
   container  Add, edit, remove, or list containers
   edge       Add, edit, remove, or list edges
@@ -54,6 +55,24 @@ Options:
       --json                       Print machine-readable JSON instead of text
       --title <TITLE>
       --description <DESCRIPTION>
+  -h, --help                       Print help
+```
+
+## `sysy set`
+
+```text
+Change the design title or description, preserving other fields
+
+Usage: sysy set [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+
+Options:
+      --json                       Print machine-readable JSON instead of text
+      --title <TITLE>
+      --description <DESCRIPTION>
+      --clear-description          Clear the optional description
   -h, --help                       Print help
 ```
 
