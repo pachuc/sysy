@@ -99,7 +99,20 @@ fn assert_geometry(design: &Design, result: &Layout) {
     }
     if let Some(bounds) = bounding_box(result, design) {
         for (id, entry) in result {
-            assert!(bounds.contains(element_rect(id, entry, design)));
+            let rect = element_rect(id, entry, design);
+            // Dragged positions carry floating point noise; the union of many
+            // rectangles can then miss an edge by a rounding error.
+            let slack = 1e-6;
+            let inner = Rect::new(
+                rect.origin.x + slack,
+                rect.origin.y + slack,
+                (rect.size.width - 2.0 * slack).max(0.0),
+                (rect.size.height - 2.0 * slack).max(0.0),
+            );
+            assert!(
+                bounds.contains(inner),
+                "bounds {bounds:?} do not contain {id} at {rect:?}"
+            );
         }
     } else {
         assert!(result.is_empty());

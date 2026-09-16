@@ -305,7 +305,12 @@ pub fn edge_geometry(design: &Design, layout: &Layout) -> BTreeMap<String, EdgeG
                 let at =
                     |point: Point| Rect::new(point.x - width / 2.0, point.y - 12.0, width, 24.0);
                 let mut rect = at(anchor);
-                for fraction in [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8] {
+                // Walk outward from the midpoint in small steps before giving up
+                // and displacing the label away from its edge.
+                for fraction in [
+                    0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8, 0.15,
+                    0.85, 0.1, 0.9,
+                ] {
                     let candidate = route_point(&route, fraction);
                     if !occupied.iter().any(|other| other.intersects(at(candidate))) {
                         anchor = candidate;
